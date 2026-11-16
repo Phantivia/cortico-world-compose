@@ -1,0 +1,16 @@
+/* Songs panel. Classes carry the compose- prefix; colours come from the WebUI's theme variables. */
+.compose-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 8px; }
+.compose-picker { min-width: 16em; }
+.compose-meta { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.compose-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.compose-audio { display: block; width: 100%; margin-bottom: 8px; }
+.compose-status { min-height: 1.4em; color: var(--ink-soft); margin-bottom: 6px; overflow-wrap: anywhere; }
+.compose-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 6px; }
+.compose-chip { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); }
+.compose-chip i { width: 14px; height: 6px; border-radius: 2px; display: inline-block; }
+.compose-chip i.compose-outside { background: transparent; outline: 2px solid var(--danger); outline-offset: -1px; }
+.compose-scroll { position: relative; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--line-2); border-radius: 6px; }
+.compose-roll { display: block; cursor: pointer; }
+.compose-playhead { position: absolute; top: 0; width: 2px; background: var(--danger); pointer-events: none; }
+.compose-facts { margin: 10px 0 0; padding-left: 1.2em; color: var(--ink-soft); }
+.compose-facts li { margin: 2px 0; overflow-wrap: anywhere; }

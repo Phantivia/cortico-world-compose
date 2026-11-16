@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+scratch/
+bench/runs/
+assets/*.sf2
+assets/*.sf3

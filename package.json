@@ -1,0 +1,77 @@
+{
+  "name": "cortico-world-compose",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Coo writes a lead sheet (form, chords, melodies); the World adds the band and renders it to audio",
+  "license": "MIT",
+  "author": "Phantivia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Phantivia/cortico-world-compose.git"
+  },
+  "homepage": "https://github.com/Phantivia/cortico-world-compose#readme",
+  "bugs": {
+    "url": "https://github.com/Phantivia/cortico-world-compose/issues"
+  },
+  "keywords": [
+    "cortico-world",
+    "cortico"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.28.6",
+  "main": "./src/index.ts",
+  "cortico": {
+    "kind": "world",
+    "api": 6,
+    "displayName": "Compose",
+    "tags": [
+      "creative",
+      "experimental"
+    ],
+    "describe": "describe.json",
+    "locales": {
+      "zh": {
+        "displayName": "作曲",
+        "description": "Coo 写谱(曲式、和弦、旋律),World 按律动配上伴奏并渲染成音频。"
+      },
+      "en": {
+        "displayName": "Compose",
+        "description": "Coo writes a lead sheet (form, chords, melodies); the World adds the band and renders it to audio."
+      }
+    },
+    "webUiClient": "dist/webui.js",
+    "webUiStyle": "dist/webui.css",
+    "icon": "assets/icon.svg"
+  },
+  "files": [
+    "src",
+    "dist",
+    "assets",
+    "scripts",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "describe.json"
+  ],
+  "scripts": {
+    "build": "node scripts/build-webui.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json",
+    "fetch:soundfont": "node scripts/fetch-soundfont.mjs",
+    "prepack": "node scripts/build-webui.mjs && node scripts/fetch-soundfont.mjs"
+  },
+  "dependencies": {
+    "audify": "^1.10.1",
+    "spessasynth_core": "^4.4.10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "cortico": "^0.2.4",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
