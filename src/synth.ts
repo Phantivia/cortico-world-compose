@@ -121,6 +121,21 @@ export function levelDb(audio: Rendered, from: number, to: number): number {
   return 10 * Math.log10(sum / Math.max(1, b - a) + 1e-12);
 }
 
+/** Mono at half the sample rate, 16 bit: a twentieth of a megabyte per second, for sending to a model. */
+export function wavBytesMono(audio: Rendered): Buffer {
+  const n = Math.floor(audio.left.length / 2), rate = SAMPLE_RATE / 2;
+  const out = Buffer.alloc(44 + n * 2);
+  out.write('RIFF', 0); out.writeUInt32LE(36 + n * 2, 4); out.write('WAVEfmt ', 8);
+  out.writeUInt32LE(16, 16); out.writeUInt16LE(1, 20); out.writeUInt16LE(1, 22);
+  out.writeUInt32LE(rate, 24); out.writeUInt32LE(rate * 2, 28); out.writeUInt16LE(2, 32); out.writeUInt16LE(16, 34);
+  out.write('data', 36); out.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) {
+    const v = (audio.left[i * 2] + audio.right[i * 2] + audio.left[i * 2 + 1] + audio.right[i * 2 + 1]) / 4;
+    out.writeInt16LE(Math.round(Math.max(-1, Math.min(1, v)) * 32767), 44 + i * 2);
+  }
+  return out;
+}
+
 export function wavBytes(audio: Rendered): Buffer {
   const n = audio.left.length;
   const out = Buffer.alloc(44 + n * 4);

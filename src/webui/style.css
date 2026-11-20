@@ -14,3 +14,31 @@
 .compose-playhead { position: absolute; top: 0; width: 2px; background: var(--danger); pointer-events: none; }
 .compose-facts { margin: 10px 0 0; padding-left: 1.2em; color: var(--ink-soft); }
 .compose-facts li { margin: 2px 0; overflow-wrap: anywhere; }
+
+/* Keyboard panel. The keys keep a piano's own black and white in both themes. */
+.compose-kb-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 8px; }
+.compose-kb-record.compose-kb-live { color: var(--danger); border-color: var(--danger); }
+.compose-kb-check { display: inline-flex; align-items: center; gap: 6px; }
+.compose-kb-tempo { width: 5.5em; }
+.compose-kb-range { min-width: 2.2em; text-align: center; font-variant-numeric: tabular-nums; }
+.compose-kb-volume { width: 110px; margin-left: auto; }
+.compose-kb-tape { display: block; width: 100%; height: 64px; border: 1px solid var(--line-2); border-radius: 6px; margin-bottom: 8px; }
+.compose-kb-stage { position: relative; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--line-2); border-radius: 6px; outline: none; padding-bottom: 2px; }
+.compose-kb-stage:focus { border-color: var(--accent); }
+.compose-kb-keys { position: relative; height: 132px; user-select: none; touch-action: none; }
+.compose-kb-key { position: absolute; top: 0; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; cursor: pointer; }
+.compose-kb-white { width: 30px; height: 132px; background: #fbfaf6; border: 1px solid #b9b6ad; border-top: none; border-radius: 0 0 4px 4px; color: #6b675e; padding-bottom: 4px; }
+.compose-kb-black { width: 18px; height: 82px; background: #23252b; border-radius: 0 0 3px 3px; z-index: 1; color: #d9d6cd; padding-bottom: 4px; }
+.compose-kb-key b { font-size: 12px; font-weight: 600; line-height: 1.2; }
+.compose-kb-key span { font-size: 9px; line-height: 1.2; opacity: 0.7; }
+.compose-kb-white:not(.compose-kb-mapped) { background: #e9e7e0; }
+.compose-kb-black:not(.compose-kb-mapped) { background: #4a4c53; }
+.compose-kb-key.compose-kb-down, .compose-kb-key.compose-kb-lit { background: var(--accent); color: #fff; }
+.compose-kb-hint { position: sticky; left: 0; bottom: 0; padding: 4px 8px; color: var(--ink-soft); }
+.compose-kb-stage:focus .compose-kb-hint { visibility: hidden; }
+.compose-kb-legend { margin: 6px 0 14px; color: var(--ink-soft); font-size: 12px; }
+.compose-kb-list-title { margin: 0 0 6px; }
+.compose-kb-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line-2); }
+.compose-kb-name { min-width: 9em; font-variant-numeric: tabular-nums; }
+.compose-kb-kind { color: var(--ink-soft); flex: 1; }
+.compose-kb-none { color: var(--ink-soft); }

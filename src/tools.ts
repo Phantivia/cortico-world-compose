@@ -222,9 +222,54 @@ const NOTES_TOOL: Decl = {
   },
 };
 
+const PHRASE_ABOUT =
+  'Keep a phrase: a bar or a few, written to try an idea out, to answer one, or to show what something sounds like. It is rendered at once and kept in a notebook under its name, apart from the songs; ' +
+  'writing a name again replaces the phrase. A phrase is played, read and opened by its name like a song by its title. ';
+
+const PHRASE_NAME_TEXT = 'Letters, digits and underscores.';
+
+const PHRASE_TOOL: Decl = {
+  name: 'compose_phrase',
+  description:
+    PHRASE_ABOUT + 'In a song, a bar written "@name" stands for a phrase of one line, as it does for a motif. ' +
+    'The line is written as in compose_render. The receipt gives the file, the length and what was measured in the notes.',
+  tags: ['write'],
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      name: { type: 'string', description: PHRASE_NAME_TEXT },
+      line: { type: 'string', description: 'The phrase.' },
+      instrument: { type: 'string', description: `Instrument that plays the line. One of: ${INSTRUMENT_NAMES.join(', ')}. Default piano.` },
+      tempo: { type: 'number', description: 'Quarter notes per minute, 30–300.' },
+      key: { type: 'string', description: 'Like "D major", "B minor", "F dorian".' },
+      meter: { type: 'string', description: METER_TEXT },
+      parts: { type: 'object', additionalProperties: { type: 'string' }, description: 'More lines sounding with it, keyed by instrument name, as in a section of a song.' },
+      chords: { type: 'string', description: 'The chords under the phrase, written as in a section of a song. They are what the notes are measured against, and what a band plays when a groove is given.' },
+      groove: { type: 'string', enum: GROOVE_NAMES, description: 'A band under the phrase, as in a section of a song. Default none: only the written lines sound.' },
+    },
+    required: ['name', 'line', 'tempo'],
+  },
+};
+
+const ABC_PHRASE_TOOL: Decl = {
+  name: 'compose_phrase',
+  description: PHRASE_ABOUT + 'The phrase is written in ABC notation as in compose_render. The receipt gives the file, the length and what was measured in the notes.',
+  tags: ['write'],
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      name: { type: 'string', description: PHRASE_NAME_TEXT },
+      abc: { type: 'string', description: 'The phrase in ABC notation, header first.' },
+    },
+    required: ['name', 'abc'],
+  },
+};
+
 const READ_TOOL: Decl = {
   name: 'compose_read',
-  description: 'Without a title: list the songs written so far. With a title: return the song last rendered under it, as it was written.',
+  description: 'Without a title: list the songs and phrases written so far, and the phrases someone played on the keyboard. With a title or a phrase name: return it as it was written or played.',
   tags: ['read'],
   parameters: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' } } },
 };
@@ -233,21 +278,21 @@ const TITLE_ONLY = { type: 'object', additionalProperties: false, properties: { 
 
 const PLAY_TOOL: Decl = {
   name: 'compose_play',
-  description: "Play a rendered song aloud on this computer, through the output device chosen in this World's settings. It returns as soon as playback has started; a song already playing is stopped first.",
+  description: "Play a rendered song (by its title) or a phrase (by its name) aloud on this computer, through the output device chosen in this World's settings. It returns as soon as playback has started; whatever was playing is stopped first.",
   tags: ['act'],
   parameters: TITLE_ONLY,
 };
 
 const STOP_TOOL: Decl = {
   name: 'compose_stop',
-  description: 'Stop the song that compose_play is playing.',
+  description: 'Stop what compose_play is playing.',
   tags: ['act'],
   parameters: { type: 'object', additionalProperties: false, properties: {} },
 };
 
 const OPEN_TOOL: Decl = {
   name: 'compose_open',
-  description: "Open a rendered song's audio file in the computer's default player application, where the person can pause, seek and replay it themselves.",
+  description: "Open the audio file of a song or a phrase in the computer's default player application, where the person can pause, seek and replay it themselves.",
   tags: ['act'],
   parameters: TITLE_ONLY,
 };
@@ -256,8 +301,8 @@ const SHARED: Decl[] = [READ_TOOL, PLAY_TOOL, STOP_TOOL, OPEN_TOOL];
 
 /** The tools of each toolset, `compose_render` first. */
 export const TOOLSETS: Record<ComposeConfigSection['toolset'], Decl[]> = {
-  sheet: [SHEET_TOOL, REVISE_TOOL, ...SHARED],
-  score: [SCORE_TOOL, SCORE_REVISE_TOOL, ...SHARED],
-  abc: [ABC_TOOL, ...SHARED],
-  notes: [NOTES_TOOL, ...SHARED],
+  sheet: [SHEET_TOOL, REVISE_TOOL, PHRASE_TOOL, ...SHARED],
+  score: [SCORE_TOOL, SCORE_REVISE_TOOL, PHRASE_TOOL, ...SHARED],
+  abc: [ABC_TOOL, ABC_PHRASE_TOOL, ...SHARED],
+  notes: [NOTES_TOOL, PHRASE_TOOL, ...SHARED],
 };

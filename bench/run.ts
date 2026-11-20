@@ -17,7 +17,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { coopanionDir, endpoint as namedEndpoint, keyFile, soundfontFile } from './local.ts';
-import { TASKS, VARIANTS } from './matrix.ts';
+import { TAKES, TASKS, VARIANTS } from './matrix.ts';
 
 const HERE = fileURLToPath(new URL('./', import.meta.url));
 const COOPANION = coopanionDir();
@@ -128,6 +128,11 @@ socket.on('message', (raw) => { try { frames.push(JSON.parse(String(raw))); } ca
 await new Promise<void>((done, fail) => { socket.on('open', () => done()); socket.on('error', fail); });
 socket.send(JSON.stringify({ type: 'hello', name: 'bench' }));
 await sleep(500);
+// a task with a take: someone plays it on the Keyboard panel, then speaks
+if (TAKES[taskId]) {
+  result.take = await api(`/api/webui/providers/${encodeURIComponent('world:compose')}/panels/keyboard/take`, { method: 'POST', body: JSON.stringify({ args: [TAKES[taskId]] }) });
+  await sleep(300);
+}
 socket.send(JSON.stringify({ type: 'msg', text: task }));
 
 // The run is over when the Core's loop has sat idle, every event delivered, for IDLE_MS. The loop's own phase is

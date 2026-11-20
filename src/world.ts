@@ -3,7 +3,7 @@
  * what was measured in the result.
  */
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ToolDef, ToolOutcome, World, WorldHost, WorldWebUiDecl } from 'cortico/core/types.ts';
@@ -12,9 +12,10 @@ import { arrange } from './arrange.ts';
 import { composeConfigGroup, COMPOSE_DEFAULTS, type ComposeConfigSection } from './config.ts';
 import { describeFacts, measure } from './facts.ts';
 import { parseScore, writeScore } from './score.ts';
+import { describeTake, PHRASE_NAME, phraseLine, phraseSheet, readTake, takeArrangement, takeLines, type StoredPhrase } from './phrase.ts';
 import { readSong, SheetError, type Song } from './sheet.ts';
 import { Player } from './player.ts';
-import { levelDb, render, SoundFont, wavBytes } from './synth.ts';
+import { levelDb, render, SoundFont, wavBytes, wavBytesMono } from './synth.ts';
 import { TOOLSETS } from './tools.ts';
 import { songView } from './view.ts';
 
@@ -54,6 +55,7 @@ export class ComposeWorld implements World {
   private readonly soundFont = new SoundFont();
   private readonly toolset: ComposeConfigSection['toolset'];
   private readonly player = new Player();
+  private host: WorldHost | null = null;
 
   constructor(private readonly opts: ComposeWorldOptions) {
     this.toolset = TOOLSETS[opts.cfg.toolset] ? opts.cfg.toolset : COMPOSE_DEFAULTS.toolset;
@@ -67,6 +69,7 @@ export class ComposeWorld implements World {
     const handlers: Record<string, (args: Record<string, unknown>) => Promise<ToolOutcome>> = {
       compose_render: (args) => this.renderWritten(args),
       compose_revise: (args) => this.revise(args),
+      compose_phrase: (args) => this.writePhrase(args),
       compose_read: async (args) => this.read(args),
       compose_play: async (args) => this.play(args),
       compose_stop: async () => this.stopPlaying(),
@@ -80,7 +83,10 @@ export class ComposeWorld implements World {
     return {
       label: zh ? '作曲' : 'Compose',
       config: [composeConfigGroup(language)],
-      panels: [{ id: 'songs', title: zh ? '曲子' : 'Songs', description: zh ? '写过的曲子:音符、段落、测量结果和试听。' : 'The songs written so far: notes, sections, measured facts and playback.' }],
+      panels: [
+        { id: 'songs', title: zh ? '曲子' : 'Songs', description: zh ? '写过的曲子:音符、段落、测量结果和试听。' : 'The songs written so far: notes, sections, measured facts and playback.' },
+        { id: 'keyboard', title: zh ? '键盘' : 'Keyboard', description: zh ? '弹一句录下来发给 Coo;Coo 写的乐句也在这里听。' : 'Play a phrase, record it and send it to Coo; phrases Coo wrote are heard here too.' },
+      ],
       invoke: (panel, method, args) => this.invokePanel(panel, method, args),
       promptDocs: [
         {
@@ -95,7 +101,9 @@ export class ComposeWorld implements World {
     };
   }
 
-  async start(_host: WorldHost): Promise<void> {}
+  async start(host: WorldHost): Promise<void> {
+    this.host = host;
+  }
 
   async stop(): Promise<void> {
     this.player.stop();
@@ -103,6 +111,7 @@ export class ComposeWorld implements World {
 
   /** Data for the Songs panel. */
   private async invokePanel(panel: string, method: string, args: unknown[]): Promise<unknown> {
+    if (panel === 'keyboard') return this.invokeKeyboard(method, args);
     if (panel !== 'songs') throw new Error(`unknown panel: ${panel}`);
     const dir = this.outputDir();
     const title = typeof args[0] === 'string' ? args[0] : '';
@@ -145,10 +154,86 @@ export class ComposeWorld implements World {
     throw new Error(`unknown method: ${method}`);
   }
 
+  /** Data for the Keyboard panel: the phrase notebook, and the door a finished take comes in through. */
+  private async invokeKeyboard(method: string, args: unknown[]): Promise<unknown> {
+    const dir = this.phraseDir();
+    if (method === 'take') return this.keepTake(args[0]);
+    if (method === 'phrases') {
+      return {
+        phrases: readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => {
+          const stored = JSON.parse(readFileSync(join(dir, f), 'utf8')) as StoredPhrase;
+          return { name: stored.name, played: stored.take !== undefined, rendered: existsSync(join(dir, `${stored.name}.wav`)), changedAtMs: statSync(join(dir, f)).mtimeMs };
+        }).sort((a, b) => b.changedAtMs - a.changedAtMs),
+      };
+    }
+    const name = typeof args[0] === 'string' ? args[0] : '';
+    const file = join(dir, `${name}.json`);
+    if (!PHRASE_NAME.test(name) || !existsSync(file)) throw new Error(`no phrase named "${name}"`);
+    if (method === 'phrase') {
+      const stored = JSON.parse(readFileSync(file, 'utf8')) as StoredPhrase;
+      const arrangement = stored.take ? takeArrangement(stored.take) : arrange(readStored(this.withPhrases(phraseSheet(stored))));
+      const notes = arrangement.tracks.filter((track) => track.role === 'lead' || track.role === 'part').flatMap((track) => track.notes.map((n) => [n.at, n.until, n.pitch]));
+      return { name, played: stored.take !== undefined, seconds: arrangement.seconds, notes, lines: stored.take ? stored.lines ?? [] : typeof stored.line === 'string' ? [stored.line] : [] };
+    }
+    if (method === 'audio') {
+      const wav = join(dir, `${name}.wav`);
+      if (!existsSync(wav)) throw new Error(`"${name}" has no audio`);
+      return { $binary: { mime: 'audio/wav', base64: readFileSync(wav).toString('base64') } };
+    }
+    if (method === 'remove') {
+      for (const ext of ['json', 'wav']) rmSync(join(dir, `${name}.${ext}`), { force: true });
+      return { removed: name };
+    }
+    throw new Error(`unknown method: ${method}`);
+  }
+
   private outputDir(): string {
     const dir = this.opts.cfg.outputDir || join(this.opts.dataDir, 'compose');
     mkdirSync(dir, { recursive: true });
     return dir;
+  }
+
+  private phraseDir(): string {
+    const dir = join(this.outputDir(), 'phrases');
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  private phrase(name: string): StoredPhrase | null {
+    const file = join(this.phraseDir(), `${name}.json`);
+    return PHRASE_NAME.test(name) && existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as StoredPhrase : null;
+  }
+
+  /** The phrases a text names with "@name", as motifs: name to line. */
+  private phraseMotifs(text: string): Record<string, string> {
+    const found: Record<string, string> = {};
+    for (const [, name] of text.matchAll(/@([A-Za-z0-9_]+)/g)) {
+      if (name in found) continue;
+      const line = this.motifLine(name, []);
+      if (line !== null) found[name] = line;
+    }
+    return found;
+  }
+
+  /** A phrase's line with the bars that are another phrase ("@take1") written out, since a motif cannot hold a motif. */
+  private motifLine(name: string, within: string[]): string | null {
+    const stored = this.phrase(name);
+    const line = stored ? phraseLine(stored) : null;
+    if (line === null) return null;
+    return line.split('|').map((bar) => {
+      const inner = /^\s*@([A-Za-z0-9_]+)\s*$/.exec(bar)?.[1];
+      const written = inner !== undefined && inner !== name && !within.includes(inner) ? this.motifLine(inner, [...within, name]) : null;
+      return written === null ? bar : ` ${written} `;
+    }).join('|');
+  }
+
+  /** A sheet with the phrases it names copied in as motifs, so the stored song does not change when a phrase does. */
+  private withPhrases(stored: Stored): Stored {
+    if (typeof stored.abc === 'string') return stored;
+    const motifs = (stored.motifs && typeof stored.motifs === 'object' ? stored.motifs : {}) as Record<string, string>;
+    const named = this.phraseMotifs(JSON.stringify([stored.sections ?? null, stored.tracks ?? null, Object.values(motifs)]));
+    for (const name of Object.keys(named)) if (name in motifs) delete named[name];
+    return Object.keys(named).length === 0 ? stored : { ...stored, motifs: { ...named, ...motifs } };
   }
 
   private soundFontFile(): string | null {
@@ -161,14 +246,16 @@ export class ComposeWorld implements World {
   /** `compose_render`: turns what the toolset's call carries into what is stored, then renders that. */
   private async renderWritten(args: Record<string, unknown>): Promise<ToolOutcome> {
     if (this.toolset === 'score') {
-      const { sheet, problems } = parseScore(typeof args.score === 'string' ? args.score : '');
+      const text = typeof args.score === 'string' ? args.score : '';
+      const { sheet, problems } = parseScore(text, this.phraseMotifs(text));
       return this.renderStored(sheet, problems);
     }
     return this.renderStored(args);
   }
 
   /** Renders a song from its stored form. `found` are problems met before this point, listed with the rest. */
-  private async renderStored(stored: Stored, found: string[] = []): Promise<ToolOutcome> {
+  private async renderStored(written: Stored, found: string[] = []): Promise<ToolOutcome> {
+    const stored = this.withPhrases(written);
     const problems = [...found];
     let song: Song | null = null;
     try {
@@ -217,7 +304,8 @@ export class ComposeWorld implements World {
     const stored = JSON.parse(readFileSync(file, 'utf8')) as Stored;
     let change = args, found: string[] = [];
     if (this.toolset === 'score') {
-      const read = parseScore(typeof args.score === 'string' ? args.score : '', (stored.motifs as Record<string, string>) ?? {});
+      const text = typeof args.score === 'string' ? args.score : '';
+      const read = parseScore(text, { ...this.phraseMotifs(text), ...((stored.motifs as Record<string, string>) ?? {}) });
       change = read.sheet;
       found = read.problems;
     }
@@ -235,6 +323,56 @@ export class ComposeWorld implements World {
     return this.renderStored(merged, found);
   }
 
+  /** `compose_phrase`: keeps a short passage in the notebook and renders it. */
+  private async writePhrase(args: Record<string, unknown>): Promise<ToolOutcome> {
+    const name = typeof args.name === 'string' ? args.name.trim() : '';
+    if (!PHRASE_NAME.test(name)) return { failed: true, text: `[not kept] a phrase name is letters, digits and underscores, so that "@name" can stand for it in a song; got "${name}"` };
+    const stored: StoredPhrase = { ...args, name };
+    let song: Song;
+    try {
+      song = readStored(this.withPhrases(phraseSheet(stored)));
+    } catch (e) {
+      if (!(e instanceof SheetError)) throw e;
+      return { failed: true, text: `[not kept] ${e.problems.length} problem${e.problems.length === 1 ? '' : 's'}:\n- ${e.problems.join('\n- ')}` };
+    }
+    const font = this.soundFontFile();
+    if (font === null) return { failed: true, text: `[not kept] no SoundFont file: ${this.opts.cfg.soundfontFile || `${ASSETS_DIR} holds no .sf2 or .sf3`}. The phrase itself reads without problems.` };
+    const audio = await render(arrange(song), this.soundFont.load(font));
+    const dir = this.phraseDir(), wav = join(dir, `${name}.wav`);
+    writeFileSync(wav, wavBytes(audio));
+    writeFileSync(join(dir, `${name}.json`), JSON.stringify(stored, null, 2) + '\n');
+    const lines = [`Kept the phrase "${name}" and rendered it to ${wav}.`];
+    const banded = stored.groove !== undefined && stored.groove !== 'none';
+    if (this.opts.cfg.reportsFacts) lines.push(...describeFacts(song, measure(song), audio.seconds).filter((line) => banded || !line.startsWith('Sections:')));
+    if (phraseLine(stored) !== null) lines.push(`In a song, a bar written "@${name}" stands for this phrase, and "@${name}+1" moves it a scale step up.`);
+    return { text: lines.join('\n') };
+  }
+
+  /** A take from the panel's keyboard: kept as a phrase, rendered as it was played, and delivered as an event. */
+  private async keepTake(given: unknown): Promise<{ name: string; delivered: boolean; text: string }> {
+    const take = readTake(given);
+    if (take === null || take.notes.length === 0) throw new Error('the take holds no notes');
+    const dir = this.phraseDir();
+    let n = 1;
+    while (existsSync(join(dir, `take${n}.json`))) n++;
+    const name = `take${n}`;
+    const lines = takeLines(take);
+    const stored: StoredPhrase = { name, take, ...(lines ? { lines } : {}) };
+    writeFileSync(join(dir, `${name}.json`), JSON.stringify(stored) + '\n');
+    const text = describeTake(name, take, lines);
+    const font = this.soundFontFile();
+    const blobs: Array<{ bytes: Uint8Array; mime: string; name: string; fallbackText: string }> = [];
+    if (font !== null) {
+      const audio = await render(takeArrangement(take), this.soundFont.load(font));
+      const wav = join(dir, `${name}.wav`);
+      writeFileSync(wav, wavBytes(audio));
+      blobs.push({ bytes: wavBytesMono(audio), mime: 'audio/wav', name: `${name}.wav`, fallbackText: `(The take as audio, ${audio.seconds.toFixed(1)} s: ${wav})` });
+    }
+    if (this.host === null) return { name, delivered: false, text };
+    await this.host.pushEvent({ type: 'compose.take', ts: new Date().toISOString(), source: this.id, origin: 'internal', text, meta: { phrase: name, notes: take.notes.length }, blobs }, { trigger: 'flush' });
+    return { name, delivered: true, text };
+  }
+
   private read(args: Record<string, unknown>): ToolOutcome {
     const dir = this.outputDir();
     const title = typeof args.title === 'string' ? args.title.trim() : '';
@@ -244,10 +382,19 @@ export class ComposeWorld implements World {
         const versions = readdirSync(dir).filter((v) => v.startsWith(`${name}.v`) && v.endsWith('.json')).length;
         return `- ${name} (${versions} version${versions === 1 ? '' : 's'}, last rendered ${statSync(join(dir, f)).mtime.toISOString().slice(0, 16).replace('T', ' ')} UTC)`;
       });
-      return { text: songs.length === 0 ? `No songs yet in ${dir}.` : `Songs in ${dir}:\n${songs.join('\n')}` };
+      const phrases = readdirSync(this.phraseDir()).filter((f) => f.endsWith('.json')).map((f) => {
+        const stored = JSON.parse(readFileSync(join(this.phraseDir(), f), 'utf8')) as StoredPhrase;
+        return `- ${stored.name} (${stored.take ? `played on the keyboard, ${stored.take.notes.length} notes` : 'written'})`;
+      });
+      return { text: [songs.length === 0 ? `No songs yet in ${dir}.` : `Songs in ${dir}:\n${songs.join('\n')}`, ...(phrases.length > 0 ? [`Phrases:\n${phrases.join('\n')}`] : [])].join('\n') };
     }
     const file = join(dir, `${slug(title)}.json`);
-    if (!existsSync(file)) return { failed: true, text: `[not found] no song titled "${title}" in ${dir}` };
+    if (!existsSync(file)) {
+      const phrase = this.phrase(title);
+      if (phrase === null) return { failed: true, text: `[not found] no song titled "${title}" in ${dir}, and no phrase of that name` };
+      if (phrase.take) return { text: describeTake(phrase.name, phrase.take, phrase.lines ?? null) };
+      return { text: typeof phrase.abc === 'string' ? phrase.abc : JSON.stringify(phrase, null, 2) + '\n' };
+    }
     // in the notation the song was written in: ABC as its text, a score as text, a sheet as its fields
     const stored = JSON.parse(readFileSync(file, 'utf8')) as Stored;
     if (typeof stored.abc === 'string') return { text: stored.abc };
@@ -258,8 +405,9 @@ export class ComposeWorld implements World {
   /** The rendered file of a title, or the receipt that says why there is none to play. */
   private playable(args: Record<string, unknown>): { file: string; title: string } | ToolOutcome {
     const title = typeof args.title === 'string' ? args.title : '';
-    const file = join(this.outputDir(), `${slug(title)}.wav`);
-    if (!existsSync(file)) return { failed: true, text: `[not found] no rendered song titled "${title}"` };
+    const song = join(this.outputDir(), `${slug(title)}.wav`), phrase = join(this.phraseDir(), `${title}.wav`);
+    const file = existsSync(song) ? song : PHRASE_NAME.test(title) && existsSync(phrase) ? phrase : null;
+    if (file === null) return { failed: true, text: `[not found] no rendered song titled "${title}", and no phrase of that name` };
     if (!this.opts.cfg.canPlay) return { text: `[not played] playback is turned off in this World's settings. The file is ${file}` };
     return { file, title };
   }

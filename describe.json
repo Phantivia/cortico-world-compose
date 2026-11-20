@@ -301,8 +301,83 @@
       }
     },
     {
+      "name": "compose_phrase",
+      "description": "Keep a phrase: a bar or a few, written to try an idea out, to answer one, or to show what something sounds like. It is rendered at once and kept in a notebook under its name, apart from the songs; writing a name again replaces the phrase. A phrase is played, read and opened by its name like a song by its title. In a song, a bar written \"@name\" stands for a phrase of one line, as it does for a motif. The line is written as in compose_render. The receipt gives the file, the length and what was measured in the notes.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Letters, digits and underscores."
+          },
+          "line": {
+            "type": "string",
+            "description": "The phrase."
+          },
+          "instrument": {
+            "type": "string",
+            "description": "Instrument that plays the line. One of: piano, electric piano, harpsichord, celesta, glockenspiel, music box, vibraphone, marimba, organ, accordion, harmonica, nylon guitar, steel guitar, jazz guitar, clean guitar, overdrive guitar, acoustic bass, electric bass, fretless bass, synth bass, violin, viola, cello, pizzicato, harp, strings, choir, trumpet, trombone, french horn, muted trumpet, brass, soprano sax, alto sax, tenor sax, oboe, clarinet, piccolo, flute, recorder, pan flute, whistle, ocarina, synth lead, saw lead, synth pad, kalimba, koto, shakuhachi, steel drums. Default piano."
+          },
+          "tempo": {
+            "type": "number",
+            "description": "Quarter notes per minute, 30–300."
+          },
+          "key": {
+            "type": "string",
+            "description": "Like \"D major\", \"B minor\", \"F dorian\"."
+          },
+          "meter": {
+            "type": "string",
+            "description": "Like \"4/4\", \"3/4\", \"6/8\", \"5/4\", \"7/8\": a bar of 1 to 8 quarter notes. Default 4/4. Tempo counts quarter notes in every meter."
+          },
+          "parts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "More lines sounding with it, keyed by instrument name, as in a section of a song."
+          },
+          "chords": {
+            "type": "string",
+            "description": "The chords under the phrase, written as in a section of a song. They are what the notes are measured against, and what a band plays when a groove is given."
+          },
+          "groove": {
+            "type": "string",
+            "enum": [
+              "pop",
+              "rock",
+              "ballad",
+              "bossa",
+              "samba",
+              "swing",
+              "waltz",
+              "funk",
+              "lofi",
+              "dance",
+              "ambient",
+              "none"
+            ],
+            "description": "A band under the phrase, as in a section of a song. Default none: only the written lines sound."
+          }
+        },
+        "required": [
+          "name",
+          "line",
+          "tempo"
+        ]
+      },
+      "tags": [
+        "write"
+      ],
+      "summary": {
+        "zh": "写下一两句旋律并立刻渲染，存进乐句本;在曲子里用 @名字 引用。",
+        "en": "Writes down a phrase or two, renders it at once and keeps it in the notebook; a song refers to it as @name."
+      }
+    },
+    {
       "name": "compose_read",
-      "description": "Without a title: list the songs written so far. With a title: return the song last rendered under it, as it was written.",
+      "description": "Without a title: list the songs and phrases written so far, and the phrases someone played on the keyboard. With a title or a phrase name: return it as it was written or played.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -316,13 +391,13 @@
         "read"
       ],
       "summary": {
-        "zh": "列出写过的曲子，或取回某一首最近一次渲染的谱子。",
-        "en": "Lists the songs written so far, or returns the sheet last rendered under a title."
+        "zh": "列出写过的曲子和乐句，或取回其中一个。",
+        "en": "Lists the songs and phrases written so far, or returns one of them."
       }
     },
     {
       "name": "compose_play",
-      "description": "Play a rendered song aloud on this computer, through the output device chosen in this World's settings. It returns as soon as playback has started; a song already playing is stopped first.",
+      "description": "Play a rendered song (by its title) or a phrase (by its name) aloud on this computer, through the output device chosen in this World's settings. It returns as soon as playback has started; whatever was playing is stopped first.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -339,13 +414,13 @@
         "act"
       ],
       "summary": {
-        "zh": "在配置里选定的输出设备上播放一首渲染好的曲子。",
-        "en": "Plays a rendered song on the output device chosen in the settings."
+        "zh": "在配置里选定的输出设备上播放一首曲子或一个乐句。",
+        "en": "Plays a song or a phrase on the output device chosen in the settings."
       }
     },
     {
       "name": "compose_stop",
-      "description": "Stop the song that compose_play is playing.",
+      "description": "Stop what compose_play is playing.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -355,13 +430,13 @@
         "act"
       ],
       "summary": {
-        "zh": "停止正在播放的曲子。",
-        "en": "Stops the song that is playing."
+        "zh": "停止正在播放的声音。",
+        "en": "Stops what is playing."
       }
     },
     {
       "name": "compose_open",
-      "description": "Open a rendered song's audio file in the computer's default player application, where the person can pause, seek and replay it themselves.",
+      "description": "Open the audio file of a song or a phrase in the computer's default player application, where the person can pause, seek and replay it themselves.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -378,18 +453,27 @@
         "act"
       ],
       "summary": {
-        "zh": "用系统默认播放器打开一首曲子的音频文件。",
-        "en": "Opens a song's audio file in the system's default player."
+        "zh": "用系统默认播放器打开曲子或乐句的音频文件。",
+        "en": "Opens the audio file of a song or a phrase in the system's default player."
       }
     }
   ],
-  "events": [],
+  "events": [
+    {
+      "type": "compose.take",
+      "description": {
+        "zh": "有人在「键盘」页签弹了一段并录了下来:音符数据、对齐到十六分音符的谱面(开了节拍器时)和这段演奏的音频。",
+        "en": "Someone played and recorded a take on the Keyboard tab: the notes as data, as lines moved to sixteenths (when the metronome was on), and the audio of the playing."
+      },
+      "trigger": "flush"
+    }
+  ],
   "prompts": [
     {
       "key": "worlds.compose.envPrompt",
       "title": "作曲 · 环境提示词",
       "role": "envPrompt",
-      "content": "You can write music here: you write a song down and it comes back as an audio file on this computer. Nobody hears it until it is played for them.\n\nBefore writing notes, decide three things: one short motif (a rhythm with a few pitches, two bars at most) that the song grows from; the sections and what each one is for; where the song is quietest and where it peaks.\n\nWrite melody as phrases, not bar by bar. State the motif, repeat it changed (moved up or down a step, or with a new ending), then on the third or fourth time break the pattern the listener has come to expect. End phrases with rests; a second instrument can answer in those gaps. Prefer steps to leaps and save a leap for where it matters.\n\nSections should differ in more than their notes: groove, energy, which instruments play, register. A section that comes back should change something. A bar where the band stops, a new key and a new groove are all ways to break an expectation.\n\nThe band a groove brings is a starting point, not a rule. In any section you can keep all of it, switch off the roles you would rather write yourself (the bass line, the drum pattern, the chord playing, the fills), hand a role to another instrument, or have no band and write every line. Meter, tempo and key can change from one section to the next, and a line can carry its own dynamics, notes sounding together and tuplets.\n\nNotes held for a beat or longer belong to the chord or are a tension you chose; quick notes may pass through anything.\n\nWork in passes. Write a short first version straight into a render, without drafting every bar beforehand, then listen through the receipt: compare the measured facts with what you intended and change the parts that disagree. Section levels that are all alike, many identical bars, or a single bar rhythm throughout mean the song is monotonous. A long song is easier to get right by adding and replacing sections than by writing it whole in one go.\n"
+      "content": "You can write music here at two sizes. A phrase is a bar or a few: written in a moment, rendered at once, kept in a notebook under its name. A song is the whole thing, with sections and a band. Both come back as audio files on this computer. Nobody hears them until they are played for them.\n\nMost musical moments in a conversation are phrase-sized: what would this sound like, here is an idea, give me a hook, which of these two endings. A phrase played aloud answers them better than a description, and far sooner than a song. People can also play to you: what someone plays on the keyboard of the Compose page arrives as a take, with its notes as data and as audio, and is kept in the same notebook. A take can be played back, answered, continued, harmonised or varied with a phrase of your own.\n\nA song is easier to get right when it grows from phrases that were heard first. Try the motif as a phrase, change it until it is worth a song, then let the song call it by name; a take someone played can be the motif too.\n\nBefore writing the notes of a song, decide three things: one short motif (a rhythm with a few pitches, two bars at most) that the song grows from; the sections and what each one is for; where the song is quietest and where it peaks.\n\nWrite melody as phrases, not bar by bar. State the motif, repeat it changed (moved up or down a step, or with a new ending), then on the third or fourth time break the pattern the listener has come to expect. End phrases with rests; a second instrument can answer in those gaps. Prefer steps to leaps and save a leap for where it matters.\n\nSections should differ in more than their notes: groove, energy, which instruments play, register. A section that comes back should change something. A bar where the band stops, a new key and a new groove are all ways to break an expectation.\n\nThe band a groove brings is a starting point, not a rule. In any section you can keep all of it, switch off the roles you would rather write yourself (the bass line, the drum pattern, the chord playing, the fills), hand a role to another instrument, or have no band and write every line. Meter, tempo and key can change from one section to the next, and a line can carry its own dynamics, notes sounding together and tuplets.\n\nNotes held for a beat or longer belong to the chord or are a tension you chose; quick notes may pass through anything.\n\nWork in passes. Write a short first version straight into a render, without drafting every bar beforehand, then listen through the receipt: compare the measured facts with what you intended and change the parts that disagree. Section levels that are all alike, many identical bars, or a single bar rhythm throughout mean the song is monotonous. A long song is easier to get right by adding and replacing sections than by writing it whole in one go.\n"
     }
   ]
 }

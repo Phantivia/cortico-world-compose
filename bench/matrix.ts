@@ -28,4 +28,17 @@ export const TASKS: Record<string, string> = {
   // two requests no stock groove answers: the band has to be written by hand
   nocturne: '写一段一分钟左右的钢琴独奏，夜曲的感觉，左手的伴奏音型你自己设计。直接写，不用先问我，写完告诉我文件在哪。',
   fives: '写一首 5/4 拍的小曲，四十秒左右，鼓和贝斯要有自己的性格，不要现成的套路。直接写，不用先问我，写完告诉我文件在哪。',
+
+  // 2026-11-19 (0.3.0): phrase-sized requests. Is a phrase written and played, or a whole song?
+  riff: '我想要一个两小节的吉他 riff，带点放克味。先弹给我听听。',
+  endings: '有一段旋律是 C5 D5 E5 G5 | E5 D5 C5 -(4/4，一拍一个音)。给它想两个不同的结尾，各两小节，都弹给我听，我挑一个。',
+  // with a take from the keyboard (TAKES below) delivered just before the message
+  answer: '我刚在键盘上弹了一句，你听听，接着它往下写两小节，然后连起来弹给我。',
+  grow: '用我刚弹的那句当动机，写一首三十秒左右的小曲。直接写，不用先问我，写完告诉我文件在哪。',
+};
+
+/** A take delivered through the Keyboard panel before the task of the same name is sent: [seconds, seconds held, pitch]. */
+export const TAKES: Record<string, { tempo: number | null; meter: string; notes: Array<[number, number, number]> }> = {
+  answer: { tempo: 100, meter: '4/4', notes: [[0.02, 0.55, 64], [0.61, 0.28, 67], [0.9, 0.3, 69], [1.21, 1.1, 67], [2.4, 0.3, 64], [2.71, 0.28, 62], [3.01, 0.56, 60], [3.6, 1.1, 62]] },
+  grow: { tempo: null, meter: '4/4', notes: [[0, 0.4, 69], [0.45, 0.2, 72], [0.68, 0.22, 76], [0.93, 0.9, 74], [1.95, 0.2, 72], [2.2, 0.21, 74], [2.44, 1.2, 69]] },
 };

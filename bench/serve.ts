@@ -39,6 +39,8 @@ for (const run of readdirSync(RUNS).filter((r) => !r.startsWith('_') && r.includ
   const receipt = await render.handler(stored, {} as never);
   console.log(String(typeof receipt === 'string' ? receipt : receipt.text).split('\n')[0].slice(0, 110));
 }
+// one written phrase, so the Keyboard panel has something of Coo's to play
+await world.tools().find((t) => t.name === 'compose_phrase')!.handler({ name: 'hook', tempo: 100, key: 'C major', line: 'C5 . E5 G5 - - E5 - | D5 - - - . . . .' }, {} as never);
 // one draft that does not read, to show that state
 writeFileSync(join(OUT, '坏掉的草稿.json'), JSON.stringify({ title: '坏掉的草稿', tempo: 100, sections: [{ name: 'A', groove: 'pop', chords: 'C | G', melody: 'C5 D5 E5 | G5 - - - -' }] }));
 

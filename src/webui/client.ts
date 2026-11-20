@@ -5,6 +5,7 @@
  */
 import type { WebUiClientBundle, WebUiPanelContext } from 'cortico/web/shared/client-panel.ts';
 import type { SongView } from '../view.ts';
+import { mountKeyboard } from './keyboard.ts';
 import './style.css';
 
 interface SongRow { title: string; rendered: boolean; versions: number; changedAtMs: number }
@@ -270,5 +271,5 @@ function mount(ctx: WebUiPanelContext): void {
   ctx.interval(() => { void refresh().catch(() => undefined); }, 5000);
 }
 
-const bundle: WebUiClientBundle = { panels: { songs: { mount } } };
+const bundle: WebUiClientBundle = { panels: { songs: { mount }, keyboard: { mount: mountKeyboard } } };
 export default bundle;

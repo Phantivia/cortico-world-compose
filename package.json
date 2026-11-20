@@ -1,6 +1,6 @@
 {
   "name": "cortico-world-compose",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Coo writes a song down (form, chords, melodies) as fields, as a text score or in ABC; the World adds the band and renders it to audio",
   "license": "MIT",
@@ -34,11 +34,11 @@
     "locales": {
       "zh": {
         "displayName": "作曲",
-        "description": "Coo 把曲子写下来(曲式、和弦、旋律),World 按律动配上伴奏并渲染成音频;伴奏的每个角色都可以按段关掉自己写。"
+        "description": "Coo 写一两句旋律或一整首曲子(曲式、和弦、旋律),World 配上伴奏并渲染成音频;你也可以在键盘页签弹一段录下来发给 Coo。"
       },
       "en": {
         "displayName": "Compose",
-        "description": "Coo writes a song down (form, chords, melodies); the World adds the band and renders it to audio. Every role of the band can be switched off per section and written by hand."
+        "description": "Coo writes a phrase or a whole song (form, chords, melodies); the World adds the band and renders it to audio. You can also play a take on the Keyboard tab and send it to Coo."
       }
     },
     "webUiClient": "dist/webui.js",
