@@ -120,9 +120,8 @@ describe('band', () => {
   it('a stop bar holds one hit per band track and nothing after beat 1', () => {
     const song = readSong(sheet({ sections: [{ name: 'A', groove: 'pop', energy: 4, chords: 'C | F | G | C', stops: [3] }, { name: 'B', groove: 'pop', energy: 4, chords: 'C' }] }));
     const a = arrange(song);
-    const barSeconds = a.secondsPerBeat * 4;
-    const inBar3 = (at: number) => at >= a.leadIn + 2 * barSeconds - 0.02 && at < a.leadIn + 3 * barSeconds - 0.02;
-    for (const track of a.tracks) for (const n of track.notes.filter((x) => inBar3(x.at))) expect(n.at).toBeLessThan(a.leadIn + 2 * barSeconds + 0.05);
+    const inBar3 = (at: number) => at >= a.barTimes[2] - 0.02 && at < a.barTimes[3] - 0.02;
+    for (const track of a.tracks) for (const n of track.notes.filter((x) => inBar3(x.at))) expect(n.at).toBeLessThan(a.barTimes[2] + 0.05);
   });
 
   it('a long note a semitone above a chord tone is reported, a chord tone is not', () => {

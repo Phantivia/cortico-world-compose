@@ -14,10 +14,11 @@ export interface ComposeConfigSection {
   /** 设备播放的音量，0 到 1。 */
   playbackVolume: number;
   /**
-   * 工具形状。`sheet`:写曲式、和弦与旋律，伴奏按律动生成;`notes`:每一轨(含贝斯和鼓)都逐音写，没有伴奏生成。
-   * `notes` 只为对照留着。重启生效。
+   * 曲子怎么写下来。`sheet`:工具调用的字段(曲式、和弦、旋律各一个字段),伴奏按律动生成;
+   * `score`:同一套记法写成一整段文本;`abc`:ABC 记谱，乐队用 `%%groove` 一行请进来;
+   * `notes`:每一轨(含贝斯和鼓)都逐音写，没有伴奏生成，只为对照留着。重启生效。
    */
-  toolset: 'sheet' | 'notes';
+  toolset: 'sheet' | 'score' | 'abc' | 'notes';
   /** 渲染回执是否带量出来的事实(各段电平、音域、和弦外音、重复的小节)。 */
   reportsFacts: boolean;
 }
@@ -83,9 +84,11 @@ export function composeConfigGroup(language: string): ConfigGroup {
         },
         'worlds.compose.toolset': {
           type: 'string',
-          enum: ['sheet', 'notes'],
-          title: zh ? '工具形状' : 'Tool shape',
-          description: zh ? 'sheet:写曲式、和弦与旋律，伴奏自动生成;notes:每一轨逐音写。' : 'sheet: write form, chords and melodies, the band is generated; notes: every track is written note by note.',
+          enum: ['sheet', 'score', 'abc', 'notes'],
+          title: zh ? '记谱方式' : 'Notation',
+          description: zh
+            ? 'sheet:曲式、和弦、旋律各填一个字段;score:同一套记法写成一整段文本;abc:ABC 记谱;notes:每一轨逐音写，没有自动伴奏。前三种都能按段关掉或改写自动伴奏。'
+            : 'sheet: form, chords and melodies as fields of the call; score: the same notation as one text; abc: ABC notation; notes: every track note by note, no generated band. In the first three the generated band can be switched off or rewritten per section.',
           'x-hot': false,
         },
       },

@@ -5,29 +5,32 @@
  *
  *   tsx bench/run.ts <variant> <task> [index]
  *
- * The key file (bench/local.ts) is copied into the run's home; the key is never printed.
- * Results: bench/runs/<variant>-<task>/{out/*.wav, out/*.json, result.json, core.log}
+ * Environment: ENDPOINT (a name from "endpoints" in bench/local.json; without it the app's default DeepSeek
+ * endpoint), MODEL and MAXTOK (replace the endpoint's model and output limit), TRIAL (suffix of the run name),
+ * IDLE_MS, LIMIT_MS.
+ * The key file, or the copied endpoint, goes into the run's home (bench/local.ts); keys are never printed.
+ * Results: bench/runs/<endpoint>-<variant>-<task>/{out/*.wav, out/*.json, result.json, core.log}
  */
 import { spawn } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { coopanionDir, keyFile, soundfontFile } from './local.ts';
+import { coopanionDir, endpoint as namedEndpoint, keyFile, soundfontFile } from './local.ts';
 import { TASKS, VARIANTS } from './matrix.ts';
 
 const HERE = fileURLToPath(new URL('./', import.meta.url));
 const COOPANION = coopanionDir();
-const KEY_FILE = keyFile();
 const SOUNDFONT = soundfontFile();
 const EXTENSIONS = join(HERE, 'extensions');
-const IDLE_MS = Number(process.env.IDLE_MS ?? 100_000), LIMIT_MS = Number(process.env.LIMIT_MS ?? 9 * 60_000);
+const IDLE_MS = Number(process.env.IDLE_MS ?? 25_000), LIMIT_MS = Number(process.env.LIMIT_MS ?? 15 * 60_000);
 
 const [variantId, taskId, indexArg] = process.argv.slice(2);
 const variant = VARIANTS[variantId], task = TASKS[taskId];
 if (!variant || !task) { console.error(`usage: run.ts <${Object.keys(VARIANTS).join('|')}> <${Object.keys(TASKS).join('|')}> [index]`); process.exit(2); }
 const model = process.env.MODEL ?? '';
-const runName = `${variantId}-${taskId}${model ? `-${model}` : ''}${process.env.TRIAL ? `-${process.env.TRIAL}` : ''}`;
+const endpointName = process.env.ENDPOINT ?? '';
+const runName = `${endpointName || 'deepseek'}-${variantId}-${taskId}${model ? `-${model}` : ''}${process.env.TRIAL ? `-${process.env.TRIAL}` : ''}`;
 const RUN = join(HERE, 'runs', runName);
 const HOME = join(RUN, 'home'), OUT = join(RUN, 'out');
 const PORT = 17820 + Number(indexArg ?? 0);
@@ -48,9 +51,22 @@ const config = JSON.parse(readFileSync(configFile, 'utf8'));
 config.web = { ...config.web, port: PORT };
 config.companion = { ...config.companion, telemetry: false };
 config.worlds = { ...config.worlds, compose: { enabled: true, soundfontFile: SOUNDFONT, outputDir: OUT, canPlay: false, toolset: variant.toolset, reportsFacts: variant.facts } };
+let endpoint = join(HOME, 'providers', config.activeProvider);
+if (endpointName) {
+  // another deployment's endpoint: its config and its key or grant are copied, the source is only read
+  const from = namedEndpoint(endpointName);
+  endpoint = join(HOME, 'providers', endpointName);
+  mkdirSync(endpoint, { recursive: true });
+  const entry = JSON.parse(readFileSync(join(from.dir, 'config.json'), 'utf8'));
+  entry.spec = { ...entry.spec, ...from.spec };
+  entry.options = { ...entry.options, quotaSampleMinutes: 0 };
+  writeFileSync(join(endpoint, 'config.json'), JSON.stringify(entry, null, 2) + '\n');
+  for (const secret of ['.env', 'oauth.json']) if (existsSync(join(from.dir, secret))) copyFileSync(join(from.dir, secret), join(endpoint, secret));
+  config.activeProvider = endpointName;
+} else {
+  copyFileSync(keyFile(), join(endpoint, '.env'));
+}
 writeFileSync(configFile, JSON.stringify(config, null, 2) + '\n');
-const endpoint = join(HOME, 'providers', config.activeProvider);
-copyFileSync(KEY_FILE, join(endpoint, '.env'));
 if (model || process.env.MAXTOK) {
   const entry = JSON.parse(readFileSync(join(endpoint, 'config.json'), 'utf8'));
   if (model) entry.spec.model = model;
@@ -87,7 +103,7 @@ const api = async (path: string, init?: RequestInit) => {
 const started = Date.now();
 let status: Record<string, unknown> | null = null;
 while (!status && exited === null && Date.now() - started < 90_000) { await sleep(1500); status = await api('/api/status').catch(() => null); }
-const result: Record<string, unknown> = { variant: variantId, task: taskId, model: model || 'default', request: task };
+const result: Record<string, unknown> = { variant: variantId, task: taskId, endpoint: endpointName || 'deepseek', model: JSON.parse(readFileSync(join(endpoint, 'config.json'), 'utf8')).spec?.model ?? 'default', request: task };
 const finish = async (why: string) => {
   result.ended = why;
   result.seconds = Math.round((Date.now() - started) / 1000);
@@ -114,23 +130,17 @@ socket.send(JSON.stringify({ type: 'hello', name: 'bench' }));
 await sleep(500);
 socket.send(JSON.stringify({ type: 'msg', text: task }));
 
-// Activity is read from the run's transcript: it grows with every model item and tool result.
-const transcriptSize = (): number => {
-  const runs = join(deploy, 'data', 'runs');
-  if (!existsSync(runs)) return 0;
-  return readdirSync(runs).reduce((sum, r) => {
-    const f = join(runs, r, 'transcript.jsonl');
-    return sum + (existsSync(f) ? statSync(f).size : 0);
-  }, 0);
-};
+// The run is over when the Core's loop has sat idle, every event delivered, for IDLE_MS. The loop's own phase is
+// asked rather than the transcript watched: a model that thinks for minutes writes nothing meanwhile.
 await sleep(4000);
-let size = transcriptSize(), lastGrowth = Date.now();
+let idleSince: number | null = null;
 while (true) {
   await sleep(3000);
   if (exited !== null) await finish(`core exited (${exited})`);
-  const now = transcriptSize();
-  if (now !== size) { size = now; lastGrowth = Date.now(); }
+  const loop = ((await api('/api/status').catch(() => null))?.loop ?? null) as { phase?: { state?: string }; behind?: number; batchesHandled?: number } | null;
+  const idle = loop !== null && loop.phase?.state === 'idle' && (loop.behind ?? 0) === 0 && (loop.batchesHandled ?? 0) >= 1;
+  idleSince = idle ? idleSince ?? Date.now() : null;
   result.frames = frames.filter((f) => (f as { type?: string }).type !== 'sys');
-  if (Date.now() - lastGrowth > IDLE_MS) await finish('idle');
+  if (idleSince !== null && Date.now() - idleSince > IDLE_MS) await finish('idle');
   if (Date.now() - started > LIMIT_MS) await finish('time limit');
 }

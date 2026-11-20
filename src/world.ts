@@ -1,5 +1,5 @@
 /**
- * Compose World: the bot writes a lead sheet, the World plays it. Receipts state what was written to disk and
+ * Compose World: the bot writes a song down, the World plays it. Receipts state what was written to disk and
  * what was measured in the result.
  */
 import { spawn } from 'node:child_process';
@@ -7,157 +7,36 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ToolDef, ToolOutcome, World, WorldHost, WorldWebUiDecl } from 'cortico/core/types.ts';
+import { readAbc } from './abc.ts';
 import { arrange } from './arrange.ts';
-import { composeConfigGroup, type ComposeConfigSection } from './config.ts';
+import { composeConfigGroup, COMPOSE_DEFAULTS, type ComposeConfigSection } from './config.ts';
 import { describeFacts, measure } from './facts.ts';
-import { GROOVES, GROOVE_NAMES } from './grooves.ts';
-import { INSTRUMENT_NAMES } from './instruments.ts';
-import { readSong, SheetError } from './sheet.ts';
+import { parseScore, writeScore } from './score.ts';
+import { readSong, SheetError, type Song } from './sheet.ts';
 import { Player } from './player.ts';
 import { levelDb, render, SoundFont, wavBytes } from './synth.ts';
+import { TOOLSETS } from './tools.ts';
 import { songView } from './view.ts';
 
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url));
 const ASSETS_DIR = fileURLToPath(new URL('../assets/', import.meta.url));
 
-const LINE_FORMAT =
-  'A line is bars separated by "|". A bar is slots of equal length separated by spaces: 4 slots are quarter notes, 8 are eighths, ' +
-  '16 are sixteenths (3, 6 or 12 for triplets); bars of one line may use different slot counts. A slot is a pitch ("F#5", "Bb4"; C4 is middle C), ' +
-  '"-" to hold the previous note, or "." for a rest. "%" repeats the previous bar. ' +
-  'Two bars of eighths: ". F#5 A5 D6 - - E6 - | - . . C#6 B5 - . ."';
+type Stored = Record<string, unknown>;
 
-const SHEET_TOOL: Omit<ToolDef, 'handler'> = {
-  name: 'compose_render',
-  description:
-    'Render a song written as a lead sheet to an audio file. You write the form, the chords and the melodic lines; ' +
-    "chords, bass and drums are played from each section's groove and energy. Rendering a title again replaces its audio. " +
-    LINE_FORMAT + ' ' +
-    'The receipt gives the file and measured facts: length, the level of each section, ranges, notes that clash with their chord, bars that repeat.',
-  tags: ['write'],
-  parameters: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      title: { type: 'string', description: 'Song title; also the file name.' },
-      tempo: { type: 'number', description: 'Beats per minute, 30–300.' },
-      key: { type: 'string', description: 'Like "D major", "B minor", "F dorian".' },
-      meter: { type: 'string', enum: ['4/4', '3/4'], description: 'Default 4/4.' },
-      lead: { type: 'string', description: `Instrument that plays each section's "melody". One of: ${INSTRUMENT_NAMES.join(', ')}.` },
-      motifs: {
-        type: 'object',
-        additionalProperties: { type: 'string' },
-        description: 'Named lines to reuse. In any line, a bar written "@name" stands for the motif; "@name+1" or "@name-2" moves it by that many scale steps of the key.',
-      },
-      form: { type: 'array', items: { type: 'string' }, description: 'Section names in playing order; a name may come more than once. Without it the sections play once each, in the order written.' },
-      sections: {
-        type: 'array',
-        description: 'The sections of the song, each written once.',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            name: { type: 'string' },
-            like: { type: 'string', description: 'Name of an earlier section to copy; fields given here replace the copied ones.' },
-            groove: {
-              type: 'string',
-              enum: GROOVE_NAMES,
-              description: 'What the band plays. ' + Object.entries(GROOVES).map(([name, g]) => `${name}: ${g.summary}`).join('. ') + '. none: no band, only the written lines.' +
-                ' waltz needs meter 3/4; the others except ambient and none need 4/4.',
-            },
-            energy: { type: 'integer', minimum: 1, maximum: 5, description: 'How full and loud the band plays: 1 is the barest version of the groove, 5 the busiest. Written lines get louder with it too.' },
-            chords: { type: 'string', description: 'One bar per "|", one to eight symbols per bar sharing it equally, "-" holds, "%" repeats the bar, "N.C." silences the band: "Dmaj9 | Em9 A13 | F#m7 - - B7b9".' },
-            melody: { type: 'string', description: 'The line of the lead instrument.' },
-            parts: { type: 'object', additionalProperties: { type: 'string' }, description: 'More lines, keyed by instrument name: counter-melodies, answers, doublings. The key "drums" takes drum letters instead of pitches (K kick, S snare, X rim, H hi-hat, O open hat, R ride, C crash, T tom, M shaker), several per slot.' },
-            stops: { type: 'array', items: { type: 'integer' }, description: 'Bar numbers within the section where the band plays one hit on beat 1 and then rests; written lines go on.' },
-          },
-          required: ['name'],
-        },
-      },
-    },
-    required: ['title', 'tempo', 'sections'],
-  },
-};
+/** The tools of the default toolset, for the package's self-description. */
+export const COMPOSE_TOOL_DECLS: ReadonlyArray<Omit<ToolDef, 'handler'>> = TOOLSETS[COMPOSE_DEFAULTS.toolset];
 
-const NOTES_TOOL: Omit<ToolDef, 'handler'> = {
-  name: 'compose_render',
-  description:
-    'Render written tracks to an audio file. Nothing is added: every instrument, bass and drums included, is a line you write. ' +
-    'Rendering a title again replaces its audio. ' + LINE_FORMAT,
-  tags: ['write'],
-  parameters: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      title: { type: 'string', description: 'Song title; also the file name.' },
-      tempo: { type: 'number', description: 'Beats per minute, 30–300.' },
-      meter: { type: 'string', enum: ['4/4', '3/4'], description: 'Default 4/4.' },
-      tracks: {
-        type: 'object',
-        additionalProperties: { type: 'string' },
-        description: `One line per instrument, all starting at bar 1. Instruments: ${INSTRUMENT_NAMES.join(', ')}. The key "drums" takes drum letters instead of pitches (K kick, S snare, X rim, H hi-hat, O open hat, R ride, C crash, T tom, M shaker), several per slot.`,
-      },
-    },
-    required: ['title', 'tempo', 'tracks'],
-  },
-};
-
-const SHEET_PROPERTIES = (SHEET_TOOL.parameters as { properties: Record<string, Record<string, unknown>> }).properties;
-
-const REVISE_TOOL: Omit<ToolDef, 'handler'> = {
-  name: 'compose_revise',
-  description:
-    'Change parts of a song already written (rendered, or kept as a draft after a failed render) and render it. Give only what changes: a section with the name of an existing one replaces it, ' +
-    'a section with a new name is added (at the end of the playing order unless form is given), a motif replaces the one of the same name, ' +
-    'and tempo, key, lead and form replace the old values. Everything else stays as it was. The receipt is that of a full render.',
-  tags: ['write'],
-  parameters: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      title: { type: 'string', description: 'Title of the song to change.' },
-      tempo: SHEET_PROPERTIES.tempo,
-      key: SHEET_PROPERTIES.key,
-      lead: SHEET_PROPERTIES.lead,
-      motifs: SHEET_PROPERTIES.motifs,
-      form: SHEET_PROPERTIES.form,
-      sections: { ...SHEET_PROPERTIES.sections, description: 'Sections to replace or add, written in full.' },
-    },
-    required: ['title'],
-  },
-};
-
-const READ_TOOL: Omit<ToolDef, 'handler'> = {
-  name: 'compose_read',
-  description: 'Without a title: list the songs written so far. With a title: return the sheet last rendered under it, as it was written.',
-  tags: ['read'],
-  parameters: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' } } },
-};
-
-const TITLE_ONLY = { type: 'object', additionalProperties: false, properties: { title: { type: 'string' } }, required: ['title'] };
-
-const PLAY_TOOL: Omit<ToolDef, 'handler'> = {
-  name: 'compose_play',
-  description: "Play a rendered song aloud on this computer, through the output device chosen in this World's settings. It returns as soon as playback has started; a song already playing is stopped first.",
-  tags: ['act'],
-  parameters: TITLE_ONLY,
-};
-
-const STOP_TOOL: Omit<ToolDef, 'handler'> = {
-  name: 'compose_stop',
-  description: 'Stop the song that compose_play is playing.',
-  tags: ['act'],
-  parameters: { type: 'object', additionalProperties: false, properties: {} },
-};
-
-const OPEN_TOOL: Omit<ToolDef, 'handler'> = {
-  name: 'compose_open',
-  description: "Open a rendered song's audio file in the computer's default player application, where the person can pause, seek and replay it themselves.",
-  tags: ['act'],
-  parameters: TITLE_ONLY,
-};
-
-/** Every tool an instance may return; `toolset` picks which `compose_render` it is. */
-export const COMPOSE_TOOL_DECLS: ReadonlyArray<Omit<ToolDef, 'handler'>> = [SHEET_TOOL, REVISE_TOOL, READ_TOOL, PLAY_TOOL, STOP_TOOL, OPEN_TOOL];
+/**
+ * Reads what a song's .json file holds, whichever toolset wrote it: a sheet's fields (also what a score text is
+ * stored as), `{abc}`, or the bare tracks of the `notes` toolset.
+ */
+export function readStored(stored: Stored): Song {
+  if (typeof stored.abc === 'string') return readAbc(stored.abc);
+  if (stored.tracks !== undefined && stored.sections === undefined) {
+    return readSong({ title: stored.title, tempo: stored.tempo, meter: stored.meter, sections: [{ name: 'song', groove: 'none', parts: stored.tracks }] });
+  }
+  return readSong(stored);
+}
 
 export interface ComposeWorldOptions {
   cfg: ComposeConfigSection;
@@ -165,6 +44,10 @@ export interface ComposeWorldOptions {
 }
 
 const slug = (title: string): string => title.trim().replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').slice(0, 80) || 'Untitled';
+const titleOf = (stored: Stored): string => {
+  if (typeof stored.title === 'string' && stored.title.trim() !== '') return stored.title;
+  return typeof stored.abc === 'string' ? (/^\s*T:\s*(.+)$/m.exec(stored.abc)?.[1].trim() ?? '') : '';
+};
 
 export class ComposeWorld implements World {
   readonly id = 'compose';
@@ -173,7 +56,7 @@ export class ComposeWorld implements World {
   private readonly player = new Player();
 
   constructor(private readonly opts: ComposeWorldOptions) {
-    this.toolset = opts.cfg.toolset;
+    this.toolset = TOOLSETS[opts.cfg.toolset] ? opts.cfg.toolset : COMPOSE_DEFAULTS.toolset;
   }
 
   envPromptVars(): Record<string, string> {
@@ -181,14 +64,15 @@ export class ComposeWorld implements World {
   }
 
   tools(): ToolDef[] {
-    return [
-      { ...(this.toolset === 'notes' ? NOTES_TOOL : SHEET_TOOL), handler: (args) => this.renderSong(args) },
-      ...(this.toolset === 'notes' ? [] : [{ ...REVISE_TOOL, handler: (args: Record<string, unknown>) => this.revise(args) }]),
-      { ...READ_TOOL, handler: async (args) => this.read(args) },
-      { ...PLAY_TOOL, handler: async (args) => this.play(args) },
-      { ...STOP_TOOL, handler: async () => this.stopPlaying() },
-      { ...OPEN_TOOL, handler: async (args) => this.open(args) },
-    ];
+    const handlers: Record<string, (args: Record<string, unknown>) => Promise<ToolOutcome>> = {
+      compose_render: (args) => this.renderWritten(args),
+      compose_revise: (args) => this.revise(args),
+      compose_read: async (args) => this.read(args),
+      compose_play: async (args) => this.play(args),
+      compose_stop: async () => this.stopPlaying(),
+      compose_open: async (args) => this.open(args),
+    };
+    return TOOLSETS[this.toolset].map((decl) => ({ ...decl, handler: handlers[decl.name] }));
   }
 
   webUi(language = 'zh'): WorldWebUiDecl {
@@ -245,7 +129,7 @@ export class ComposeWorld implements World {
       const levelsFile = join(dir, `${slug(title)}.levels.json`);
       try {
         const levels = existsSync(levelsFile) ? JSON.parse(readFileSync(levelsFile, 'utf8')) as number[] : [];
-        return { view: songView(readSong(this.asSheet(JSON.parse(readFileSync(file, 'utf8')))), levels) };
+        return { view: songView(readStored(JSON.parse(readFileSync(file, 'utf8'))), levels) };
       } catch (e) {
         if (e instanceof SheetError) return { problems: e.problems };
         throw e;
@@ -261,12 +145,6 @@ export class ComposeWorld implements World {
     throw new Error(`unknown method: ${method}`);
   }
 
-  private asSheet(args: Record<string, unknown>): Record<string, unknown> {
-    return args.tracks !== undefined && args.sections === undefined
-      ? { title: args.title, tempo: args.tempo, meter: args.meter, sections: [{ name: 'song', groove: 'none', parts: args.tracks }] }
-      : args;
-  }
-
   private outputDir(): string {
     const dir = this.opts.cfg.outputDir || join(this.opts.dataDir, 'compose');
     mkdirSync(dir, { recursive: true });
@@ -280,23 +158,37 @@ export class ComposeWorld implements World {
     return shipped ? join(ASSETS_DIR, shipped) : null;
   }
 
-  private async renderSong(args: Record<string, unknown>): Promise<ToolOutcome> {
-    const sheet = this.asSheet(args);
-    let song;
+  /** `compose_render`: turns what the toolset's call carries into what is stored, then renders that. */
+  private async renderWritten(args: Record<string, unknown>): Promise<ToolOutcome> {
+    if (this.toolset === 'score') {
+      const { sheet, problems } = parseScore(typeof args.score === 'string' ? args.score : '');
+      return this.renderStored(sheet, problems);
+    }
+    return this.renderStored(args);
+  }
+
+  /** Renders a song from its stored form. `found` are problems met before this point, listed with the rest. */
+  private async renderStored(stored: Stored, found: string[] = []): Promise<ToolOutcome> {
+    const problems = [...found];
+    let song: Song | null = null;
     try {
-      song = readSong(sheet);
+      song = readStored(stored);
     } catch (e) {
       if (!(e instanceof SheetError)) throw e;
+      problems.push(...e.problems);
+    }
+    if (song === null || problems.length > 0) {
       let kept = '';
-      if (this.toolset === 'sheet' && typeof args.title === 'string' && args.title.trim() !== '') {
-        writeFileSync(join(this.outputDir(), `${slug(args.title)}.json`), JSON.stringify(args, null, 2) + '\n');
-        kept = '\nThe sheet is kept as a draft under its title; correcting the sections named above is enough.';
+      const title = titleOf(stored);
+      if (this.toolset !== 'notes' && title !== '') {
+        writeFileSync(join(this.outputDir(), `${slug(title)}.json`), JSON.stringify(stored, null, 2) + '\n');
+        if (this.toolset !== 'abc') kept = '\nThe song is kept as a draft under its title; correcting the sections named above is enough.';
       }
-      return { failed: true, text: `[not rendered] ${e.problems.length} problem${e.problems.length === 1 ? '' : 's'} in the sheet:\n- ${e.problems.join('\n- ')}${kept}` };
+      return { failed: true, text: `[not rendered] ${problems.length} problem${problems.length === 1 ? '' : 's'}:\n- ${problems.join('\n- ')}${kept}` };
     }
     const file = this.soundFontFile();
     if (file === null) {
-      return { failed: true, text: `[not rendered] no SoundFont file: ${this.opts.cfg.soundfontFile || `${ASSETS_DIR} holds no .sf2 or .sf3`}. The sheet itself reads without problems.` };
+      return { failed: true, text: `[not rendered] no SoundFont file: ${this.opts.cfg.soundfontFile || `${ASSETS_DIR} holds no .sf2 or .sf3`}. The song itself reads without problems.` };
     }
     const arrangement = arrange(song);
     const audio = await render(arrangement, this.soundFont.load(file));
@@ -304,12 +196,11 @@ export class ComposeWorld implements World {
     const wav = join(dir, `${name}.wav`);
     writeFileSync(wav, wavBytes(audio));
     const versions = readdirSync(dir).filter((f) => f.startsWith(`${name}.v`) && f.endsWith('.json')).length;
-    writeFileSync(join(dir, `${name}.v${versions + 1}.json`), JSON.stringify(args, null, 2) + '\n');
-    writeFileSync(join(dir, `${name}.json`), JSON.stringify(args, null, 2) + '\n');
+    writeFileSync(join(dir, `${name}.v${versions + 1}.json`), JSON.stringify(stored, null, 2) + '\n');
+    writeFileSync(join(dir, `${name}.json`), JSON.stringify(stored, null, 2) + '\n');
     const lines = [`Rendered "${song.title}" to ${wav} (version ${versions + 1}).`];
     const facts = measure(song);
-    const spb = arrangement.secondsPerBeat * song.beatsPerBar;
-    for (const s of facts.sections) s.levelDb = levelDb(audio, arrangement.leadIn + (s.bars[0] - 1) * spb, arrangement.leadIn + s.bars[1] * spb);
+    for (const s of facts.sections) s.levelDb = levelDb(audio, arrangement.barTimes[s.bars[0] - 1], arrangement.barTimes[s.bars[1]]);
     writeFileSync(join(dir, `${name}.levels.json`), JSON.stringify(facts.sections.map((s) => Number(s.levelDb!.toFixed(2)))) + '\n');
     if (this.opts.cfg.reportsFacts) {
       lines.push(...describeFacts(song, facts, audio.seconds));
@@ -323,19 +214,25 @@ export class ComposeWorld implements World {
     const title = typeof args.title === 'string' ? args.title : '';
     const file = join(this.outputDir(), `${slug(title)}.json`);
     if (!existsSync(file)) return { failed: true, text: `[not found] no song or draft titled "${title}"` };
-    const stored = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-    const sections = [...((stored.sections as Array<Record<string, unknown>>) ?? [])];
+    const stored = JSON.parse(readFileSync(file, 'utf8')) as Stored;
+    let change = args, found: string[] = [];
+    if (this.toolset === 'score') {
+      const read = parseScore(typeof args.score === 'string' ? args.score : '', (stored.motifs as Record<string, string>) ?? {});
+      change = read.sheet;
+      found = read.problems;
+    }
+    const sections = [...((stored.sections as Stored[]) ?? [])];
     const added: string[] = [];
-    for (const section of (args.sections as Array<Record<string, unknown>>) ?? []) {
+    for (const section of (change.sections as Stored[]) ?? []) {
       const at = sections.findIndex((s) => s.name === section.name);
       if (at >= 0) sections[at] = section;
       else { sections.push(section); added.push(String(section.name)); }
     }
-    const merged: Record<string, unknown> = { ...stored, sections };
-    for (const key of ['tempo', 'key', 'lead', 'form'] as const) if (args[key] !== undefined && args[key] !== null) merged[key] = args[key];
-    if (args.motifs && typeof args.motifs === 'object') merged.motifs = { ...((stored.motifs as object) ?? {}), ...(args.motifs as object) };
-    if (args.form === undefined && Array.isArray(stored.form)) merged.form = [...(stored.form as string[]), ...added];
-    return this.renderSong(merged);
+    const merged: Stored = { ...stored, sections };
+    for (const key of ['tempo', 'key', 'lead', 'form', 'meter'] as const) if (change[key] !== undefined && change[key] !== null) merged[key] = change[key];
+    if (change.motifs && typeof change.motifs === 'object') merged.motifs = { ...((stored.motifs as object) ?? {}), ...(change.motifs as object) };
+    if (change.form === undefined && Array.isArray(stored.form)) merged.form = [...(stored.form as string[]), ...added];
+    return this.renderStored(merged, found);
   }
 
   private read(args: Record<string, unknown>): ToolOutcome {
@@ -351,7 +248,11 @@ export class ComposeWorld implements World {
     }
     const file = join(dir, `${slug(title)}.json`);
     if (!existsSync(file)) return { failed: true, text: `[not found] no song titled "${title}" in ${dir}` };
-    return { text: readFileSync(file, 'utf8') };
+    // in the notation the song was written in: ABC as its text, a score as text, a sheet as its fields
+    const stored = JSON.parse(readFileSync(file, 'utf8')) as Stored;
+    if (typeof stored.abc === 'string') return { text: stored.abc };
+    if (this.toolset === 'score' && Array.isArray(stored.sections)) return { text: writeScore(stored) };
+    return { text: JSON.stringify(stored, null, 2) + '\n' };
   }
 
   /** The rendered file of a title, or the receipt that says why there is none to play. */

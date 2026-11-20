@@ -47,7 +47,7 @@ export async function render(arrangement: Arrangement, bank: BasicSoundBank, sig
   for (const track of arrangement.tracks) {
     let channel = 9;
     if (track.role !== 'drums') {
-      if (nextChannel === 9) nextChannel++;
+      if (nextChannel % 16 === 9) nextChannel++;
       channel = nextChannel++;
       while (synth.midiChannels.length <= channel) synth.createMIDIChannel();
       synth.programChange(channel, track.instrument!.program);

@@ -1,17 +1,18 @@
 /**
- * Turns a `Song` into timed events: the written parts, plus the band each section's groove asks for (chords
- * voiced from the symbols, a bass line from the roots, drum layers, a fill into the next section, a single hit
- * in a stop bar). Times leave here in seconds, with a few milliseconds of seeded jitter.
+ * Turns a `Song` into timed events: the written parts, plus whatever of the groove's band each section keeps
+ * (chords voiced from the symbols, a bass line from the roots, drum layers, a fill into the next section, a
+ * single hit in a stop bar). Times leave here in seconds, with a few milliseconds of seeded jitter.
  */
 import { GROOVES, type Groove } from './grooves.ts';
-import { findInstrument, type Instrument } from './instruments.ts';
-import type { ChordSpan, Song } from './sheet.ts';
+import type { Instrument } from './instruments.ts';
+import { locate, type ChordSpan, type Song } from './sheet.ts';
 import { voiceChord, type Chord } from './theory.ts';
 
 export type Role = 'lead' | 'part' | 'comp' | 'bass' | 'drums';
 export interface TimedNote { at: number; until: number; pitch: number; velocity: number }
 export interface Track { name: string; role: Role; instrument: Instrument | null; notes: TimedNote[] }
-export interface Arrangement { tracks: Track[]; seconds: number; secondsPerBeat: number; leadIn: number }
+/** `barTimes` holds the second at which each bar starts, and after the last one the second at which the song ends. */
+export interface Arrangement { tracks: Track[]; seconds: number; leadIn: number; barTimes: number[] }
 
 const LEAD_IN = 0.3;
 const TAIL = 2.5;
@@ -29,7 +30,7 @@ function rng(seed: string): () => number {
 
 const level = (c: string): number => (c === 'X' ? 1.15 : c === 'o' ? 0.6 : 0.88);
 
-/** Moves a beat position onto the groove's swung grid. */
+/** Moves a beat position, counted from its section's start, onto the groove's swung grid. */
 function swung(beat: number, groove: Groove | undefined): number {
   if (!groove?.swing || !groove.swingUnit) return beat;
   const unit = groove.swingUnit, s = groove.swing;
@@ -48,57 +49,68 @@ const bassRoot = (pc: number): number => 28 + ((pc - 4 + 12) % 12);
 
 interface Beats { at: number; len: number; pitch: number; velocity: number; spread?: number }
 
+/**
+ * Seconds from the song's first bar to a beat. Each section runs at its own tempo. The beat is first moved onto
+ * the swung grid of the section that `from` lies in, so a note's end is swung like its start even when it rings
+ * into the next section.
+ */
+export function clock(song: Song): (beat: number, from?: number) => number {
+  const starts: number[] = [];
+  let t = 0;
+  for (const s of song.sections) { starts.push(t); t += s.barCount * s.beats * 60 / s.tempo; }
+  const indexAt = (beat: number): number => {
+    let i = song.sections.length - 1;
+    while (i > 0 && beat < song.sections[i].firstBeat - 1e-9) i--;
+    return i;
+  };
+  return (beat, from = beat) => {
+    const home = song.sections[indexAt(from)];
+    const moved = home.firstBeat + swung(beat - home.firstBeat, GROOVES[home.groove]);
+    const i = indexAt(moved), s = song.sections[i];
+    return starts[i] + (moved - s.firstBeat) * 60 / s.tempo;
+  };
+}
+
 export function arrange(song: Song): Arrangement {
   const random = rng(`${song.title}:${song.tempo}:${song.bars}`);
-  const spb = 60 / song.tempo;
-  const beats = song.beatsPerBar;
   const band = new Map<string, { role: Role; instrument: Instrument | null; notes: Beats[] }>();
   const push = (name: string, role: Role, instrument: Instrument | null, note: Beats) => {
     let track = band.get(name);
     if (!track) band.set(name, (track = { role, instrument, notes: [] }));
     track.notes.push(note);
   };
-  const grooveOfBeat = (beat: number): Groove | undefined => {
-    const bar = Math.floor(beat / beats + 1e-9);
-    const section = song.sections.find((s) => bar >= s.firstBar && bar < s.firstBar + s.barCount);
-    return section ? GROOVES[section.groove] : undefined;
-  };
-  const energyOfBeat = (beat: number): number => {
-    const bar = Math.floor(beat / beats + 1e-9);
-    return song.sections.find((s) => bar >= s.firstBar && bar < s.firstBar + s.barCount)?.energy ?? 3;
-  };
-
   song.sections.forEach((section, index) => {
     const groove = GROOVES[section.groove];
     if (!groove) return;
+    const beats = section.beats;
     const tier = section.energy <= 2 ? 'lo' : section.energy >= 4 ? 'hi' : 'mid';
     const touch = (0.6 + 0.09 * section.energy) * (groove.touch ?? 1);
-    const comp = findInstrument(groove.comp)!, bass = findInstrument(groove.bass)!;
+    const comp = section.band.chords, bass = section.band.bass;
     const slot = groove.grid === 1 ? beats : beats / groove.grid;
     const next = song.sections[index + 1];
-    const drumsOn = groove.drums.some((layer) => section.energy >= layer.min);
+    const drumsOn = section.band.drums && groove.drums.some((layer) => section.energy >= layer.min);
     let around = 62;
     for (let b = 0; b < section.barCount; b++) {
       const spans = section.chords[b];
-      const barStart = (section.firstBar + b) * beats;
+      const barStart = section.firstBeat + b * beats;
       const nextSpans = section.chords[b + 1] ?? next?.chords[0];
       const nextRoot = nextSpans?.[0]?.chord ?? chordIn(spans, beats);
       if (section.stops.has(b)) {
         const chord = chordIn(spans, 0);
         if (chord) {
           const voicing = voiceChord(chord, around);
-          voicing.forEach((pitch) => push(`comp:${comp.name}`, 'comp', comp, { at: barStart, len: 0.45, pitch, velocity: 92 * touch }));
-          push(`bass:${bass.name}`, 'bass', bass, { at: barStart, len: 0.45, pitch: bassRoot(chord.bass), velocity: 100 * touch });
+          if (comp) voicing.forEach((pitch) => push(`comp:${comp.name}`, 'comp', comp, { at: barStart, len: 0.45, pitch, velocity: 92 * touch }));
+          if (bass) push(`bass:${bass.name}`, 'bass', bass, { at: barStart, len: 0.45, pitch: bassRoot(chord.bass), velocity: 100 * touch });
         }
         if (drumsOn) for (const pitch of [36, 38, 46]) push('drums', 'drums', null, { at: barStart, len: 0.2, pitch, velocity: 100 * touch });
         continue;
       }
       const pick = (patterns: string[]) => patterns[b % patterns.length];
       // comp
-      const cp = pick(groove.compPatterns[tier]);
+      const cp = comp ? pick(groove.compPatterns[tier]) : '';
       for (let i = 0; i < cp.length; i++) {
         const c = cp[i];
-        if (c === '.' || c === '-') continue;
+        if (c === '.' || c === '-' || !comp) continue;
         const chord = chordIn(spans, i * slot);
         if (!chord) continue;
         let holds = 0;
@@ -114,10 +126,10 @@ export function arrange(song: Song): Arrangement {
         }
       }
       // bass
-      const bp = pick(groove.bassPatterns[tier === 'lo' ? 'lo' : 'mid']);
+      const bp = bass ? pick(groove.bassPatterns[tier === 'lo' ? 'lo' : 'mid']) : '';
       for (let i = 0; i < bp.length; i++) {
         const c = bp[i];
-        if (c === '.' || c === '-') continue;
+        if (c === '.' || c === '-' || !bass) continue;
         const chord = chordIn(spans, i * slot);
         if (!chord) continue;
         let holds = 0;
@@ -131,9 +143,9 @@ export function arrange(song: Song): Arrangement {
         push(`bass:${bass.name}`, 'bass', bass, { at: barStart + i * slot, len: (1 + holds) * slot * 0.92, pitch: Math.max(28, pitch), velocity: (c === 'R' ? 96 : 84) * touch });
       }
       // drums
-      const lastBar = b === section.barCount - 1 && next !== undefined && drumsOn && section.energy >= 2;
+      const lastBar = b === section.barCount - 1 && next !== undefined && drumsOn && section.band.fills && section.energy >= 2;
       const fillFrom = beats - (beats === 3 ? 1 : 2);
-      for (const layer of groove.drums) {
+      for (const layer of drumsOn ? groove.drums : []) {
         if (section.energy < layer.min) continue;
         const dp = b % 2 === 1 && layer.b ? layer.b : layer.a;
         for (let i = 0; i < dp.length; i++) {
@@ -147,39 +159,44 @@ export function arrange(song: Song): Arrangement {
         const count = beats === 3 ? 2 : 4;
         for (let k = 0; k < count; k++) push('drums', 'drums', null, { at: barStart + fillFrom + k * 0.5, len: 0.2, pitch: toms[k + (4 - count)], velocity: (58 + 12 * k) * touch });
       }
-      if (b === 0 && drumsOn && section.energy >= 4) push('drums', 'drums', null, { at: barStart, len: 1, pitch: 49, velocity: 88 * touch });
+      if (b === 0 && drumsOn && section.band.fills && section.energy >= 4) push('drums', 'drums', null, { at: barStart, len: 1, pitch: 49, velocity: 88 * touch });
     }
   });
 
   for (const part of song.parts) {
     const name = part.drums ? 'drums' : part.name;
     for (const note of part.notes) {
-      const energy = energyOfBeat(note.start);
-      const onOne = Math.abs(note.start / beats - Math.round(note.start / beats)) < 1e-6;
+      const at = locate(song, note.start);
+      const onOne = (at?.inBar ?? 1) < 1e-6;
       const base = part.drums ? 92 : part.lead ? 94 : 80;
       push(name, part.drums ? 'drums' : part.lead ? 'lead' : 'part', part.instrument, {
         at: note.start,
         len: part.drums ? 0.2 : note.len * (note.len <= 0.5 ? 0.86 : 0.96),
         pitch: note.pitch,
-        velocity: base * (0.74 + 0.065 * energy) + (onOne ? 5 : 0),
+        // a dynamic mark is taken as written; otherwise the section's energy sets the level
+        velocity: note.velocity ?? base * (0.74 + 0.065 * (at?.section.energy ?? 3)) + (onOne ? 5 : 0),
       });
     }
   }
 
   const jitter: Record<Role, number> = { lead: 0.008, part: 0.008, comp: 0.007, bass: 0.005, drums: 0.004 };
+  const seconds = clock(song);
   const tracks: Track[] = [];
   let end = 0;
   for (const [name, track] of band) {
     const strum = track.role === 'comp' && /guitar/.test(track.instrument?.name ?? '') ? 0.007 : 0.002;
     const notes = track.notes.map((n) => {
-      const groove = grooveOfBeat(n.at);
       const shift = (random() - 0.5) * 2 * jitter[track.role] + (n.spread ?? 0) * strum;
-      const at = Math.max(0, LEAD_IN + swung(n.at, groove) * spb + shift);
-      const until = Math.max(at + 0.04, LEAD_IN + swung(n.at + n.len, groove) * spb);
+      const at = Math.max(0, LEAD_IN + seconds(n.at) + shift);
+      const until = Math.max(at + 0.04, LEAD_IN + seconds(n.at + n.len, n.at));
       end = Math.max(end, until);
       return { at, until, pitch: n.pitch, velocity: Math.round(Math.min(127, Math.max(1, n.velocity + (random() - 0.5) * 10))) };
     });
     tracks.push({ name, role: track.role, instrument: track.instrument, notes });
   }
-  return { tracks, seconds: Math.max(end, LEAD_IN + song.bars * beats * spb) + TAIL, secondsPerBeat: spb, leadIn: LEAD_IN };
+  const barTimes: number[] = [];
+  let t = LEAD_IN;
+  for (const s of song.sections) for (let b = 0; b < s.barCount; b++) { barTimes.push(t); t += s.beats * 60 / s.tempo; }
+  barTimes.push(t);
+  return { tracks, seconds: Math.max(end, t) + TAIL, leadIn: LEAD_IN, barTimes };
 }

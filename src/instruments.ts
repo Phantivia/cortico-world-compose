@@ -68,11 +68,24 @@ for (const [name, program, lo, hi, aliases] of TABLE) {
   for (const key of [name, ...aliases]) BY_NAME.set(key, def);
 }
 
+/** A name as written, without the quotes around it and with `_` and `-` read as spaces: `"synth_pad"` is synth pad. */
+export const plainName = (name: string): string => name.trim().replace(/^["'`“”‘’]+|["'`“”‘’]+$/g, '').replace(/[_-]+/g, ' ').trim().toLowerCase();
+
+/** A name from the table, or `gm 105`: any General MIDI program by its number 0–127 (no range is known for those). */
 export function findInstrument(name: string): Instrument | null {
-  return BY_NAME.get(name.trim().toLowerCase()) ?? null;
+  const key = plainName(name);
+  const numbered = /^(?:gm|program)\s*#?(\d{1,3})$/.exec(key);
+  if (numbered && Number(numbered[1]) <= 127) return { name: `gm ${Number(numbered[1])}`, program: Number(numbered[1]), lo: 0, hi: 127 };
+  return BY_NAME.get(key) ?? null;
 }
 
-/** Drum letters a `drums` part may use, one or several per slot (`KH` = kick and hi-hat together). */
+/** The table's instrument on a General MIDI program, or the bare program when the table has none. */
+export function instrumentOfProgram(program: number): Instrument {
+  const row = TABLE.find((r) => r[1] === program);
+  return row ? BY_NAME.get(row[0])! : { name: `gm ${program}`, program, lo: 0, hi: 127 };
+}
+
+/** Drum letters a `drums` part may use, one or several per slot (`KH` = kick and hi-hat together). A number 27–87 is that General MIDI percussion key. */
 export const DRUM_LETTERS: Record<string, number> = {
   K: 36, S: 38, X: 37, H: 42, O: 46, P: 44, R: 51, C: 49, T: 45, L: 41, M: 70, B: 54, W: 76, Y: 39,
 };

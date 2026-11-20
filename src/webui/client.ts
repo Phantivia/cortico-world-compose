@@ -81,7 +81,7 @@ function mount(ctx: WebUiPanelContext): void {
     const melodic = v.parts.filter((p) => !p.drums), drums = v.parts.filter((p) => p.drums);
     const pitches = melodic.flatMap((p) => p.notes.map((n) => n[2]));
     const lo = (pitches.length ? Math.min(...pitches) : 60) - 2, hi = (pitches.length ? Math.max(...pitches) : 72) + 2;
-    const totalBeats = v.bars * v.beatsPerBar;
+    const totalBeats = v.beats;
     pxPerBeat = Math.max(4, Math.min(22, 15000 / totalBeats));
     const rollH = (hi - lo + 1) * ROW, drumH = drums.length ? DRUM_LANE : 0;
     const width = GUTTER + totalBeats * pxPerBeat + 12, height = HEAD + rollH + drumH + LEVEL_LANE;
@@ -98,7 +98,7 @@ function mount(ctx: WebUiPanelContext): void {
     const y = (pitch: number) => HEAD + (hi - pitch) * ROW;
 
     v.sections.forEach((s, i) => {
-      const x0 = x(s.firstBar * v.beatsPerBar), w = s.barCount * v.beatsPerBar * pxPerBeat;
+      const x0 = x(v.barStarts[s.firstBar]), w = (v.barStarts[s.firstBar + s.barCount] - v.barStarts[s.firstBar]) * pxPerBeat;
       g.fillStyle = accent;
       g.globalAlpha = i % 2 === 0 ? 0.07 : 0.025;
       g.fillRect(x0, 0, w, height);
@@ -124,12 +124,13 @@ function mount(ctx: WebUiPanelContext): void {
     g.strokeStyle = line;
     g.lineWidth = 1;
     for (let b = 0; b <= v.bars; b++) {
-      const xb = Math.round(x(b * v.beatsPerBar)) + 0.5;
+      const xb = Math.round(x(v.barStarts[b])) + 0.5;
+      const barWidth = b < v.bars ? (v.barStarts[b + 1] - v.barStarts[b]) * pxPerBeat : 0;
       g.beginPath(); g.moveTo(xb, 20); g.lineTo(xb, height - LEVEL_LANE); g.stroke();
-      if (b < v.bars && pxPerBeat * v.beatsPerBar > 30) {
+      if (b < v.bars && barWidth > 30) {
         g.fillStyle = soft;
         g.save();
-        g.beginPath(); g.rect(xb, 20, pxPerBeat * v.beatsPerBar - 3, 18); g.clip();
+        g.beginPath(); g.rect(xb, 20, barWidth - 3, 18); g.clip();
         g.fillText(v.chords[b] || String(b + 1), xb + 3, 29);
         g.restore();
       }
@@ -184,11 +185,17 @@ function mount(ctx: WebUiPanelContext): void {
 
   const head = h('div', 'compose-playhead');
   scroller.append(head);
-  const secondsPerBeat = () => (view ? 60 / view.tempo : 0.5);
+  // sections may differ in tempo and meter: time and beat meet at the bar lines and run evenly between them
+  const across = (value: number, from: number[], to: number[]): number => {
+    let b = 0;
+    while (b < from.length - 2 && value >= from[b + 1]) b++;
+    const span = from[b + 1] - from[b];
+    return to[b] + (span > 0 ? Math.max(0, value - from[b]) / span : 0) * (to[b + 1] - to[b]);
+  };
   ctx.frame(() => {
     if (!view || audio.hidden) { head.hidden = true; return; }
     head.hidden = false;
-    const left = GUTTER + Math.max(0, (audio.currentTime - view.leadIn) / secondsPerBeat()) * pxPerBeat;
+    const left = GUTTER + across(audio.currentTime, view.barTimes, view.barStarts) * pxPerBeat;
     head.style.left = `${left}px`;
     head.style.height = canvas.style.height;
     if (!audio.paused && (left < scroller.scrollLeft + 40 || left > scroller.scrollLeft + scroller.clientWidth - 60)) scroller.scrollLeft = left - 80;
@@ -196,7 +203,7 @@ function mount(ctx: WebUiPanelContext): void {
   canvas.addEventListener('click', (e) => {
     if (!view || audio.hidden) return;
     const beat = (e.offsetX - GUTTER) / pxPerBeat;
-    audio.currentTime = Math.max(0, view.leadIn + beat * secondsPerBeat());
+    audio.currentTime = Math.max(0, across(beat, view.barStarts, view.barTimes));
   }, { signal: ctx.signal });
 
   async function show(title: string): Promise<void> {
@@ -215,8 +222,9 @@ function mount(ctx: WebUiPanelContext): void {
       return;
     }
     scroller.hidden = false;
-    const length = (view.bars * view.beatsPerBar * 60) / view.tempo;
-    meta.textContent = [`${view.tempo} bpm`, view.key, `${view.bars} bars`, `${Math.floor(length / 60)}:${String(Math.round(length % 60)).padStart(2, '0')}`,
+    const length = view.barTimes[view.bars] - view.leadIn;
+    const tempos = [...new Set(view.sections.map((s) => s.tempo))], meters = [...new Set(view.sections.map((s) => s.meter))];
+    meta.textContent = [`${tempos.join(' → ')} bpm`, meters.length === 1 && meters[0] === '4/4' ? '' : meters.join(' → '), view.key, `${view.bars} bars`, `${Math.floor(length / 60)}:${String(Math.round(length % 60)).padStart(2, '0')}`,
       row ? (row.rendered ? t.versions(row.versions) : t.draft) : ''].filter(Boolean).join(' · ');
     if (row?.rendered) {
       buttons.append(

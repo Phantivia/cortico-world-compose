@@ -1,8 +1,8 @@
 {
   "name": "cortico-world-compose",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Coo writes a lead sheet (form, chords, melodies); the World adds the band and renders it to audio",
+  "description": "Coo writes a song down (form, chords, melodies) as fields, as a text score or in ABC; the World adds the band and renders it to audio",
   "license": "MIT",
   "author": "Phantivia",
   "repository": {
@@ -34,11 +34,11 @@
     "locales": {
       "zh": {
         "displayName": "作曲",
-        "description": "Coo 写谱(曲式、和弦、旋律),World 按律动配上伴奏并渲染成音频。"
+        "description": "Coo 把曲子写下来(曲式、和弦、旋律),World 按律动配上伴奏并渲染成音频;伴奏的每个角色都可以按段关掉自己写。"
       },
       "en": {
         "displayName": "Compose",
-        "description": "Coo writes a lead sheet (form, chords, melodies); the World adds the band and renders it to audio."
+        "description": "Coo writes a song down (form, chords, melodies); the World adds the band and renders it to audio. Every role of the band can be switched off per section and written by hand."
       }
     },
     "webUiClient": "dist/webui.js",
