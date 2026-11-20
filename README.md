@@ -193,7 +193,7 @@ npx tsx bench/serve.ts [端口]                        # 只起 WebUI 看面板:
 
 问的三件事：自动伴奏改成可以解除之后，DeepSeek 的结构指标掉没掉;换一个强一些的模型，会不会去用这些自由度;曲子写成字段、写成一整段文本、写成 ABC,哪种更好使。
 
-端点两个:`deepseek`(deepseek-flash,思考开，输出上限提到 24000)和 `gemini`(抄可缇部署的 `Gemi` 端点，Antigravity 接口，
+端点两个:`deepseek`(deepseek-flash,思考开，输出上限提到 24000)和 `gemini`(抄另一个部署的 Gemini 端点，Antigravity 接口，
 `gemini-4-hydrogen-low`,思考关即 low 档)。变体见 `bench/matrix.ts`:`sheet.guide`、`score.guide`、`abc.guide` 用发出去的环境提示词，
 `*.open` 换成 `bench/prompts/open.md`(只讲能做什么，不讲怎么作曲)。题目五个：原来的三个，加两个现成律动答不了的——
 一分钟钢琴夜曲(左手音型自己设计)、5/4 拍小曲(鼓和贝斯要有自己的性格)。
@@ -243,7 +243,7 @@ npx tsx bench/serve.ts [端口]                        # 只起 WebUI 看面板:
   9 首 5/4 全是颤音琴主奏，8 首是 D 多利亚或 D 小调。DeepSeek 的 5 首 bossa 全是 F 大调。换记谱方式、拿掉引导都不改变这一点。
 - **工具说明里的示例会被照抄。** 这一轮第一次跑的时候沿用了 0.1.0 的示例(一句 D 大调的 bossa 旋律和一串和弦),Gemini 的 bossa 直接用了那句旋律、那个调和那串和弦。
   示例换成只示意记法的占位音之后重跑，表里是重跑的数;被污染的那批留在 `bench/runs/_tuneful-examples/`。
-- 表里的数只说明结构，好不好听没有量。成曲的 MP3 在 `D:\PalAIRaw\extensions\cortico-world-compose\bench-1119\`,音色库是 Fluid R3 GM。
+- 表里的数只说明结构，好不好听没有量。成曲用 Fluid R3 GM 渲染，音频没有进仓库。
   DeepSeek 这一轮账面上每百万输出 token 记 1.2 美元，11-15 记的是 0.6 美元，原因没查，所以两轮的美分数不能直接比，要比看输出 token。
 - 台架自己的两个坑：无头 Coo 按「主循环空闲 25 秒」判定结束(原来按 100 秒没有新记录，会把思考中的一轮当成交白卷);
   轮次由 `batch.mjs` 直接起子进程(原来的 bash 循环在外层被杀后还会接着起新轮)。
