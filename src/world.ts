@@ -151,6 +151,10 @@ export class ComposeWorld implements World {
     if (method === 'play') return { text: this.play({ title }).text };
     if (method === 'stop') return { text: this.stopPlaying().text };
     if (method === 'open') return { text: this.open({ title }).text };
+    if (method === 'folder') {
+      systemOpen(dir);
+      return { text: dir };
+    }
     throw new Error(`unknown method: ${method}`);
   }
 
@@ -432,9 +436,14 @@ export class ComposeWorld implements World {
   private open(args: Record<string, unknown>): ToolOutcome {
     const found = this.playable(args);
     if ('text' in found) return found;
-    const [command, commandArgs] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', found.file]]
-      : process.platform === 'darwin' ? ['open', [found.file]] : ['xdg-open', [found.file]];
-    spawn(command as string, commandArgs as string[], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    systemOpen(found.file);
     return { text: `Asked the system to open ${found.file} in its default player. Whether it is audible cannot be seen from here.` };
   }
+}
+
+/** Hands a file or folder to the system: a file opens in its default app, a folder in the file manager. */
+function systemOpen(target: string): void {
+  const [command, commandArgs] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', target]]
+    : process.platform === 'darwin' ? ['open', [target]] : ['xdg-open', [target]];
+  spawn(command as string, commandArgs as string[], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
 }

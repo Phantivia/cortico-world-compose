@@ -15,13 +15,13 @@ const TEXT = {
   zh: {
     none: '还没有曲子。让 bot 写一首之后这里会列出来。', draft: '草稿，未渲染', versions: (n: number) => `第 ${n} 版`,
     listen: '在浏览器试听', device: '设备播放', stop: '停止', open: '用播放器打开', loading: '载入音频…',
-    problems: '这份草稿读不出来：', onDevice: (d: string) => `试听设备:${d || '系统默认'}`, lead: '主旋律', drums: '鼓', outside: '和弦外音',
+    folder: '打开产物库', folderOpened: (d: string) => `已在文件管理器打开 ${d}`, problems: '这份草稿读不出来：', onDevice: (d: string) => `试听设备:${d || '系统默认'}`, lead: '主旋律', drums: '鼓', outside: '和弦外音',
 
   },
   en: {
     none: 'No songs yet. They are listed here once the bot has written one.', draft: 'draft, not rendered', versions: (n: number) => `version ${n}`,
     listen: 'Listen in browser', device: 'Play on device', stop: 'Stop', open: 'Open in player', loading: 'Loading audio…',
-    problems: 'This draft does not read:', onDevice: (d: string) => `Playback device: ${d || 'system default'}`, lead: 'lead', drums: 'drums', outside: 'outside its chord',
+    folder: 'Open output folder', folderOpened: (d: string) => `Opened ${d} in the file manager`, problems: 'This draft does not read:', onDevice: (d: string) => `Playback device: ${d || 'system default'}`, lead: 'lead', drums: 'drums', outside: 'outside its chord',
 
   },
 };
@@ -62,6 +62,9 @@ function mount(ctx: WebUiPanelContext): void {
     return b;
   };
   const say = (text: string) => { status.textContent = text; };
+  const folder = button(t.folder, async () => say(t.folderOpened((await ctx.invoke<{ text: string }>('folder', [])).text)));
+  folder.classList.add('compose-folder');
+  bar.append(folder);
 
   const releaseAudio = () => {
     audio.pause();

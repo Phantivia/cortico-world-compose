@@ -22,7 +22,7 @@ Owner: `src/definition.ts`、`src/world.ts`、`src/tools.ts`
 播放、读取、打开先按曲名找，找不到再按乐句名找。
 
 World 推一种事件 `compose.take`(见「键盘与乐句」)。文件写在 `outputDir`:`<曲名>.wav`(同名覆盖)、`<曲名>.json`(当前谱子)、`<曲名>.v<n>.json`(每次渲染成功的谱子)、`<曲名>.levels.json`(各段实测电平，面板用);
-乐句在 `outputDir/phrases/`:`<名字>.json` 和 `<名字>.wav`。
+乐句在 `outputDir/phrases/`:`<名字>.json` 和 `<名字>.wav`。「曲子」页签的「打开产物库」在文件管理器里打开 `outputDir`。
 
 ## 键盘与乐句
 

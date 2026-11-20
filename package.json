@@ -1,6 +1,6 @@
 {
   "name": "cortico-world-compose",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "Coo writes a song down (form, chords, melodies) as fields, as a text score or in ABC; the World adds the band and renders it to audio",
   "license": "MIT",

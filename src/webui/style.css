@@ -2,6 +2,7 @@
 .compose-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 8px; }
 .compose-picker { min-width: 16em; }
 .compose-meta { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.compose-folder { margin-left: auto; }
 .compose-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .compose-audio { display: block; width: 100%; margin-bottom: 8px; }
 .compose-status { min-height: 1.4em; color: var(--ink-soft); margin-bottom: 6px; overflow-wrap: anywhere; }

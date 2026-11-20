@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- 「曲子」页签多一个「打开产物库」按钮，在文件管理器里打开 `outputDir`(曲子的 WAV 和谱子、`phrases/` 里的乐句都在里面),方便拿去别处用。
+
 ## 0.3.0
 
 - 新增乐句：`compose_phrase` 写下一两句并立刻渲染，存进乐句本(`outputDir` 下的 `phrases/`);`compose_play`、`compose_read`、`compose_open` 对乐句名同样有效;
