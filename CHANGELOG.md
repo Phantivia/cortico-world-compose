@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- 128 个 General MIDI program 都有名字、别名和音域；以前只有 50 个，其余只能写 `gm <n>` 盲猜。
+- 新增 `compose_instruments`：不带参数列分类和数量，可按分类、名字/别名片段或 program 0–127 过滤；每行给名字、program、MIDI 音域和别名。
+- `notes`、`compose_phrase` 的工具说明只保留 12 个常用音色，其余用 `compose_instruments` 按需查，避免每轮请求把整张表塞进上下文；`compose_render`、`score`、`abc` 同样不再列全表。
+- 未知乐器的错误不再列全表，只提示用 `compose_instruments` 查或用 `gm 0–127`。
+- ABC 的 `%%MIDI program` 超出 0–127 时报错，不再原样交给合成器。
+- `distortion guitar` 现在是 GM program 30（Distortion Guitar）；program 29 仍叫 `overdrive guitar`，保留 `rock guitar` 别名。
+
 ## 0.3.1
 
 - 「曲子」页签多一个「打开产物库」按钮，在文件管理器里打开 `outputDir`(曲子的 WAV 和谱子、`phrases/` 里的乐句都在里面),方便拿去别处用。

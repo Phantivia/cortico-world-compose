@@ -9,7 +9,7 @@
  *
  * Positions and lengths are in quarter-note beats. Sections may differ in meter, tempo and key.
  */
-import { DRUM_LETTERS, findInstrument, INSTRUMENT_NAMES, plainName, type Instrument } from './instruments.ts';
+import { DRUM_LETTERS, findInstrument, plainName, type Instrument } from './instruments.ts';
 import { GROOVES, GROOVE_NAMES } from './grooves.ts';
 import { diatonicShift, parseChord, parseKey, parsePitch, pitchName, type Chord, type Key } from './theory.ts';
 
@@ -274,7 +274,7 @@ export function readBand(given: unknown, groove: string, where: string, problems
       band[role as 'chords' | 'bass'] = null;
     } else {
       const instrument = findInstrument(v);
-      if (instrument === null) problems.push(`${where}: band.${role} "${String(value)}" is neither "off" nor a known instrument`);
+      if (instrument === null) problems.push(`${where}: band.${role} "${String(value)}" is neither "off" nor a known instrument; call compose_instruments for names`);
       else band[role as 'chords' | 'bass'] = instrument;
     }
   }
@@ -310,7 +310,7 @@ export function readSong(args: Raw): Song {
     const drums = base === 'drums' || base === 'percussion';
     const instrument = drums ? null : findInstrument(base);
     if (!drums && instrument === null) {
-      problems.push(`${where}: instrument "${name}" is not known; use one of: ${INSTRUMENT_NAMES.join(', ')}, drums, or "gm" and a General MIDI program number`);
+      problems.push(`${where}: instrument "${name}" is not known; call compose_instruments for names, or use "gm" and a General MIDI program number 0–127`);
       return null;
     }
     const partName = `${instrument?.name ?? 'drums'}${label ? `:${label}` : ''}`;
