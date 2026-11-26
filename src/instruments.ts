@@ -178,8 +178,7 @@ export const INSTRUMENT_NAMES: string[] = TABLE.map((row) => row.name);
 
 /** The common names kept in the tool descriptions; the full list is read with compose_instruments. */
 export const COMMON_INSTRUMENT_NAMES: string[] = [
-  'piano', 'electric piano', 'organ', 'nylon guitar', 'electric bass', 'violin',
-  'cello', 'strings', 'trumpet', 'alto sax', 'flute', 'synth pad',
+  'piano', 'electric piano', 'nylon guitar', 'electric bass', 'violin', 'cello', 'trumpet', 'flute',
 ];
 
 export const INSTRUMENT_CATEGORIES: InstrumentCategory[] = [

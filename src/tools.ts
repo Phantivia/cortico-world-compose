@@ -6,7 +6,7 @@
 import type { ToolDef } from 'cortico/core/types.ts';
 import type { ComposeConfigSection } from './config.ts';
 import { GROOVES, GROOVE_NAMES } from './grooves.ts';
-import { COMMON_INSTRUMENT_NAMES, INSTRUMENT_CATEGORIES } from './instruments.ts';
+import { COMMON_INSTRUMENT_NAMES } from './instruments.ts';
 
 type Decl = Omit<ToolDef, 'handler'>;
 
@@ -41,8 +41,8 @@ const PART_KEYS =
   'and may be "gm" with a General MIDI program number ("gm 105") for any of the 128 programs. Call compose_instruments for names and ranges.';
 
 const INSTRUMENT_TEXT =
-  `Common instruments: ${COMMON_INSTRUMENT_NAMES.join(', ')}, drums. ` +
-  'For all 128 General MIDI instruments, with ranges and aliases, call compose_instruments; any program can also be written as "gm <0–127>".';
+  `Common: ${COMMON_INSTRUMENT_NAMES.join(', ')}, drums. ` +
+  'All 128 and their ranges: call compose_instruments; or write "gm 0–127".';
 
 const METER_TEXT = 'Like "4/4", "3/4", "6/8", "5/4", "7/8": a bar of 1 to 8 quarter notes. Default 4/4. Tempo counts quarter notes in every meter.';
 
@@ -274,16 +274,16 @@ const ABC_PHRASE_TOOL: Decl = {
 const INSTRUMENTS_TOOL: Decl = {
   name: 'compose_instruments',
   description:
-    'List the instruments a part can name, with General MIDI program, MIDI range and aliases. No arguments: category counts. ' +
-    'Filter by category, by a word in the name or alias, or by program 0–127. Drums are one kit, not a program. ' +
-    'Call this before writing an instrument name you are not sure of; names are case-insensitive.',
+    'List instruments by General MIDI program, MIDI range and aliases. No arguments: category counts. ' +
+    'Filter by category, a name/alias fragment, or program 0–127. Drums are one kit, not a program. ' +
+    'Call before using an unfamiliar name.',
   tags: ['read'],
   parameters: {
     type: 'object',
     additionalProperties: false,
     properties: {
-      category: { type: 'string', enum: INSTRUMENT_CATEGORIES, description: 'A General MIDI family, or drums.' },
-      query: { type: 'string', description: 'Part of a name or alias, e.g. "bell", "sax", "pad".' },
+      category: { type: 'string', description: 'General MIDI family, or drums.' },
+      query: { type: 'string', description: 'Part of a name or alias.' },
       program: { type: 'integer', minimum: 0, maximum: 127, description: 'General MIDI program 0–127.' },
     },
   },

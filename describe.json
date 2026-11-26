@@ -25,7 +25,7 @@
           },
           "lead": {
             "type": "string",
-            "description": "Instrument that plays each section's \"melody\". Common instruments: piano, electric piano, organ, nylon guitar, electric bass, violin, cello, strings, trumpet, alto sax, flute, synth pad, drums. For all 128 General MIDI instruments, with ranges and aliases, call compose_instruments; any program can also be written as \"gm <0–127>\"."
+            "description": "Instrument that plays each section's \"melody\". Common: piano, electric piano, nylon guitar, electric bass, violin, cello, trumpet, flute, drums. All 128 and their ranges: call compose_instruments; or write \"gm 0–127\"."
           },
           "motifs": {
             "type": "object",
@@ -174,7 +174,7 @@
           },
           "lead": {
             "type": "string",
-            "description": "Instrument that plays each section's \"melody\". Common instruments: piano, electric piano, organ, nylon guitar, electric bass, violin, cello, strings, trumpet, alto sax, flute, synth pad, drums. For all 128 General MIDI instruments, with ranges and aliases, call compose_instruments; any program can also be written as \"gm <0–127>\"."
+            "description": "Instrument that plays each section's \"melody\". Common: piano, electric piano, nylon guitar, electric bass, violin, cello, trumpet, flute, drums. All 128 and their ranges: call compose_instruments; or write \"gm 0–127\"."
           },
           "motifs": {
             "type": "object",
@@ -317,7 +317,7 @@
           },
           "instrument": {
             "type": "string",
-            "description": "Instrument that plays the line. Common instruments: piano, electric piano, organ, nylon guitar, electric bass, violin, cello, strings, trumpet, alto sax, flute, synth pad, drums. For all 128 General MIDI instruments, with ranges and aliases, call compose_instruments; any program can also be written as \"gm <0–127>\". Default piano."
+            "description": "Instrument that plays the line. Common: piano, electric piano, nylon guitar, electric bass, violin, cello, trumpet, flute, drums. All 128 and their ranges: call compose_instruments; or write \"gm 0–127\". Default piano."
           },
           "tempo": {
             "type": "number",
@@ -397,37 +397,18 @@
     },
     {
       "name": "compose_instruments",
-      "description": "List the instruments a part can name, with General MIDI program, MIDI range and aliases. No arguments: category counts. Filter by category, by a word in the name or alias, or by program 0–127. Drums are one kit, not a program. Call this before writing an instrument name you are not sure of; names are case-insensitive.",
+      "description": "List instruments by General MIDI program, MIDI range and aliases. No arguments: category counts. Filter by category, a name/alias fragment, or program 0–127. Drums are one kit, not a program. Call before using an unfamiliar name.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "category": {
             "type": "string",
-            "enum": [
-              "piano",
-              "chromatic",
-              "organ",
-              "guitar",
-              "bass",
-              "strings",
-              "ensemble",
-              "brass",
-              "reed",
-              "pipe",
-              "synth lead",
-              "synth pad",
-              "synth effects",
-              "ethnic",
-              "percussive",
-              "sound effects",
-              "drums"
-            ],
-            "description": "A General MIDI family, or drums."
+            "description": "General MIDI family, or drums."
           },
           "query": {
             "type": "string",
-            "description": "Part of a name or alias, e.g. \"bell\", \"sax\", \"pad\"."
+            "description": "Part of a name or alias."
           },
           "program": {
             "type": "integer",
