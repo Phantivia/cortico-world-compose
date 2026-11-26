@@ -165,6 +165,10 @@ describe('ABC', () => {
   it('a bar longer than its meter is a problem that names the voice and the bar', () => {
     expect(problemsOf(() => readAbc('X:1\nT:t\nM:4/4\nL:1/4\nK:C\nC D E F G | C4 |'))).toContain('voice 1, bar 1');
   });
+
+  it('a MIDI program outside 0–127 is a problem, not something passed to the synth', () => {
+    expect(problemsOf(() => readAbc('X:1\nT:t\nM:4/4\nL:1/4\nK:C\nV:1\n%%MIDI program 128\nC D E F |'))).toContain('outside 0–127');
+  });
 });
 
 describe('the default path', () => {

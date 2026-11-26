@@ -6,7 +6,7 @@
 import type { ToolDef } from 'cortico/core/types.ts';
 import type { ComposeConfigSection } from './config.ts';
 import { GROOVES, GROOVE_NAMES } from './grooves.ts';
-import { INSTRUMENT_NAMES } from './instruments.ts';
+import { COMMON_INSTRUMENT_NAMES } from './instruments.ts';
 
 type Decl = Omit<ToolDef, 'handler'>;
 
@@ -38,7 +38,11 @@ const DRUM_TEXT = 'drum letters instead of pitches (K kick, S snare, X rim, H hi
 
 const PART_KEYS =
   'An instrument name may carry a label after a colon ("piano:left", "drums:hats"), which gives that instrument one more line of its own, ' +
-  'and may be "gm" with a General MIDI program number ("gm 105") for an instrument not in the list.';
+  'and may be "gm" with a General MIDI program number ("gm 105") for any of the 128 programs. Call compose_instruments for names and ranges.';
+
+const INSTRUMENT_TEXT =
+  `Common: ${COMMON_INSTRUMENT_NAMES.join(', ')}, drums. ` +
+  'All 128 and their ranges: call compose_instruments; or write "gm 0–127".';
 
 const METER_TEXT = 'Like "4/4", "3/4", "6/8", "5/4", "7/8": a bar of 1 to 8 quarter notes. Default 4/4. Tempo counts quarter notes in every meter.';
 
@@ -59,7 +63,7 @@ const SHEET_TOOL: Decl = {
       tempo: { type: 'number', description: 'Quarter notes per minute, 30–300.' },
       key: { type: 'string', description: 'Like "D major", "B minor", "F dorian".' },
       meter: { type: 'string', description: METER_TEXT },
-      lead: { type: 'string', description: `Instrument that plays each section's "melody". One of: ${INSTRUMENT_NAMES.join(', ')}.` },
+      lead: { type: 'string', description: `Instrument that plays each section's "melody". ${INSTRUMENT_TEXT}` },
       motifs: {
         type: 'object',
         additionalProperties: { type: 'string' },
@@ -143,7 +147,7 @@ const SCORE_TEXT =
   'A blank line inside a section ends a system: the lines after it go on from the bar where the longest line above stopped, so a part left out of a system rests through it.\n' +
   'Grooves: ' + GROOVE_TEXT + '\n' +
   'Energy: ' + ENERGY_TEXT.charAt(0).toLowerCase() + ENERGY_TEXT.slice(1) + '\n' +
-  `Instruments: ${INSTRUMENT_NAMES.join(', ')}.\n` +
+  `Instruments: ${INSTRUMENT_TEXT}\n` +
   'How a score is laid out (the notes are placeholders):\ntitle: Layout\ntempo: 100\nkey: C major\nlead: piano\nform: A B A\n\n[A] groove=pop energy=2\nchords: C | G7\nmelody: C5 . C5 . | C5 - - -\n\nchords: Am | G7\nmelody: C5 . C5 . | C5 - - -\nflute:  . . . . | . . C6 -\n\n[B] groove=none\nmelody: (p) C5 - - - | C5 - . .\npiano:left: C3+G3 - - - | C3+G3 - . .';
 
 const SCORE_TOOL: Decl = {
@@ -189,7 +193,7 @@ const ABC_TOOL: Decl = {
     'By itself the tune is played as written, nothing added. A line "%%groove <groove> <energy 1-5>" before a bar starts a section in which a band plays chords, bass and drums from the chord symbols; ' +
     '"%%groove none" ends that. "%%band bass=off chords=vibraphone" changes the band: ' + BAND_TEXT.charAt(0).toLowerCase() + BAND_TEXT.slice(1) + ' A "P:<name>" line names the section that starts there. ' +
     'Grooves: ' + GROOVE_TEXT + ' Energy: ' + ENERGY_TEXT.charAt(0).toLowerCase() + ENERGY_TEXT.slice(1) + ' ' +
-    `Instruments: ${INSTRUMENT_NAMES.join(', ')}. ` + RECEIPT_TEXT,
+    `Instruments: ${INSTRUMENT_TEXT} ` + RECEIPT_TEXT,
   tags: ['write'],
   parameters: {
     type: 'object',
@@ -215,7 +219,7 @@ const NOTES_TOOL: Decl = {
       tracks: {
         type: 'object',
         additionalProperties: { type: 'string' },
-        description: `One line per instrument, all starting at bar 1. Instruments: ${INSTRUMENT_NAMES.join(', ')}. The key "drums" takes drum letters instead of pitches (K kick, S snare, X rim, H hi-hat, O open hat, R ride, C crash, T tom, M shaker), several per slot.`,
+        description: `One line per instrument, all starting at bar 1. Instruments: ${INSTRUMENT_TEXT} The key "drums" takes drum letters instead of pitches (K kick, S snare, X rim, H hi-hat, O open hat, R ride, C crash, T tom, M shaker), several per slot.`,
       },
     },
     required: ['title', 'tempo', 'tracks'],
@@ -240,7 +244,7 @@ const PHRASE_TOOL: Decl = {
     properties: {
       name: { type: 'string', description: PHRASE_NAME_TEXT },
       line: { type: 'string', description: 'The phrase.' },
-      instrument: { type: 'string', description: `Instrument that plays the line. One of: ${INSTRUMENT_NAMES.join(', ')}. Default piano.` },
+      instrument: { type: 'string', description: `Instrument that plays the line. ${INSTRUMENT_TEXT} Default piano.` },
       tempo: { type: 'number', description: 'Quarter notes per minute, 30–300.' },
       key: { type: 'string', description: 'Like "D major", "B minor", "F dorian".' },
       meter: { type: 'string', description: METER_TEXT },
@@ -264,6 +268,24 @@ const ABC_PHRASE_TOOL: Decl = {
       abc: { type: 'string', description: 'The phrase in ABC notation, header first.' },
     },
     required: ['name', 'abc'],
+  },
+};
+
+const INSTRUMENTS_TOOL: Decl = {
+  name: 'compose_instruments',
+  description:
+    'List instruments by General MIDI program, MIDI range and aliases. No arguments: category counts. ' +
+    'Filter by category, a name/alias fragment, or program 0–127. Drums are one kit, not a program. ' +
+    'Call before using an unfamiliar name.',
+  tags: ['read'],
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      category: { type: 'string', description: 'General MIDI family, or drums.' },
+      query: { type: 'string', description: 'Part of a name or alias.' },
+      program: { type: 'integer', minimum: 0, maximum: 127, description: 'General MIDI program 0–127.' },
+    },
   },
 };
 
@@ -297,7 +319,7 @@ const OPEN_TOOL: Decl = {
   parameters: TITLE_ONLY,
 };
 
-const SHARED: Decl[] = [READ_TOOL, PLAY_TOOL, STOP_TOOL, OPEN_TOOL];
+const SHARED: Decl[] = [READ_TOOL, INSTRUMENTS_TOOL, PLAY_TOOL, STOP_TOOL, OPEN_TOOL];
 
 /** The tools of each toolset, `compose_render` first. */
 export const TOOLSETS: Record<ComposeConfigSection['toolset'], Decl[]> = {

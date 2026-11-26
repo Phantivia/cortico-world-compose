@@ -424,6 +424,7 @@ export function readAbc(text: string): Song {
   let leadGiven = false;
   for (const x of played) {
     const v = x.v;
+    if (!v.drums && v.program !== null && (v.program < 0 || v.program > 127)) problems.push(`voice ${v.id}: %%MIDI program ${v.program} is outside 0–127; a General MIDI program is 0–127`);
     const drums = v.drums || /drum|perc/i.test(v.name) || /drum|perc/i.test(v.id);
     const instrument = drums ? null : byName(v.name) ?? (v.program !== null ? instrumentOfProgram(v.program) : null) ?? byName(v.id) ?? findInstrument('piano')!;
     const base = instrument?.name ?? 'drums';

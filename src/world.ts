@@ -11,6 +11,7 @@ import { readAbc } from './abc.ts';
 import { arrange } from './arrange.ts';
 import { composeConfigGroup, COMPOSE_DEFAULTS, type ComposeConfigSection } from './config.ts';
 import { describeFacts, measure } from './facts.ts';
+import { catalogEntries, INSTRUMENT_CATEGORIES, parseCategory } from './instruments.ts';
 import { parseScore, writeScore } from './score.ts';
 import { describeTake, PHRASE_NAME, phraseLine, phraseSheet, readTake, takeArrangement, takeLines, type StoredPhrase } from './phrase.ts';
 import { readSong, SheetError, type Song } from './sheet.ts';
@@ -70,6 +71,7 @@ export class ComposeWorld implements World {
       compose_render: (args) => this.renderWritten(args),
       compose_revise: (args) => this.revise(args),
       compose_phrase: (args) => this.writePhrase(args),
+      compose_instruments: async (args) => this.instruments(args),
       compose_read: async (args) => this.read(args),
       compose_play: async (args) => this.play(args),
       compose_stop: async () => this.stopPlaying(),
@@ -375,6 +377,38 @@ export class ComposeWorld implements World {
     if (this.host === null) return { name, delivered: false, text };
     await this.host.pushEvent({ type: 'compose.take', ts: new Date().toISOString(), source: this.id, origin: 'internal', text, meta: { phrase: name, notes: take.notes.length }, blobs }, { trigger: 'flush' });
     return { name, delivered: true, text };
+  }
+
+  private instruments(args: Record<string, unknown>): ToolOutcome {
+    const category = typeof args.category === 'string' ? args.category.trim() : '';
+    const query = typeof args.query === 'string' ? args.query.trim() : '';
+    const rawProgram = args.program;
+    const program = typeof rawProgram === 'number' && Number.isInteger(rawProgram)
+      ? rawProgram
+      : typeof rawProgram === 'string' && /^\d{1,3}$/.test(rawProgram) ? Number(rawProgram) : undefined;
+    if (category !== '' && parseCategory(category) === null) {
+      return { failed: true, text: `[not listed] "${category}" is not a category. Use one of: ${INSTRUMENT_CATEGORIES.join(', ')}.` };
+    }
+    if (program !== undefined && (program < 0 || program > 127)) {
+      return { failed: true, text: `[not listed] program ${program} is outside 0–127; a General MIDI program is 0–127.` };
+    }
+    if (category === '' && query === '' && program === undefined) {
+      const counts = INSTRUMENT_CATEGORIES.map((name) => `${name} ${catalogEntries({ category: name }).length}`).join(', ');
+      return { text: `Categories: ${counts}.\nPass category, query or program to list instruments; each row is name | program | MIDI range | aliases.` };
+    }
+    const entries = catalogEntries({ category: category === '' ? undefined : category, query: query === '' ? undefined : query, program });
+    if (entries.length === 0) {
+      return { text: `No instrument matches ${[category && `category "${category}"`, query && `"${query}"`, program !== undefined && `program ${program}`].filter(Boolean).join(', ')}. Call compose_instruments with no arguments for the categories.` };
+    }
+    const shown = entries.slice(0, 20);
+    const rows = shown.map((entry) => {
+      const where = entry.program < 0 ? 'drums' : `gm ${entry.program}`;
+      const range = entry.anyRange ? 'any' : `${entry.lo}–${entry.hi}`;
+      const aliases = entry.aliases.length > 0 ? ` | ${entry.aliases.join(', ')}` : '';
+      return `${entry.name} | ${where} | ${range}${aliases}`;
+    });
+    const more = entries.length > shown.length ? `\n… ${entries.length - shown.length} more; narrow the query or category.` : '';
+    return { text: rows.join('\n') + more };
   }
 
   private read(args: Record<string, unknown>): ToolOutcome {
